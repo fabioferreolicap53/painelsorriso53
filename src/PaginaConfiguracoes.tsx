@@ -1,3 +1,6 @@
+import PaginaImportacao from "./PaginaImportacao";
+import PaginaExclusao from "./PaginaExclusao";
+
 export default function PaginaConfiguracoes() {
   return (
     <>
@@ -14,20 +17,27 @@ export default function PaginaConfiguracoes() {
               <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-300">Sistema</span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              CONFIGURAÇÕES <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">do Sistema</span>
+              CONFIGURACOES <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">do Sistema</span>
             </h1>
             <p className="mt-2 text-sm text-blue-200/60">
-              Gerencie as preferências e configurações do Painel Sorriso 5.3.
+              Gerencie as preferencias e configuracoes do Painel Sorriso 5.3.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
-          <p className="text-lg font-semibold text-slate-400">Configurações em desenvolvimento</p>
-          <p className="mt-1 text-sm text-slate-300">Em breve você poderá personalizar o sistema aqui.</p>
-        </div>
+      <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        {/* Importação CSV */}
+        <section>
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-400">Importação de Dados</h2>
+          <PaginaImportacao />
+        </section>
+
+        {/* Exclusão em massa */}
+        <section>
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-400">Gestão de Dados</h2>
+          <PaginaExclusao />
+        </section>
       </div>
     </>
   );

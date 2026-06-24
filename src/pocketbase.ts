@@ -1,0 +1,84 @@
+/**
+ * Servico PocketBase para a collection painelsorriso53_pacientes.
+ * Usa REST API direta — sem SDK externo.
+ *
+ * Suporta autenticacao via:
+ *   1. Token salvo em localStorage (pb_auth_token) — login via app
+ *   2. VITE_POCKETBASE_TOKEN — token fixo via env var
+ *
+ * Se nenhum token existir, busca como anonimo (requer API rules publicas).
+ */
+
+import type { Paciente } from "./types";
+
+const PB_URL = import.meta.env.VITE_POCKETBASE_URL as string;
+const PB_COLLECTION = import.meta.env.VITE_POCKETBASE_COLLECTION as string;
+const PB_TOKEN_STATIC = import.meta.env.VITE_POCKETBASE_TOKEN as string | undefined;
+
+function baseUrl(): string {
+  return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_COLLECTION}/records`;
+}
+
+/**
+ * Obtem token de autenticacao.
+ * Prioridade: localStorage > env var > vazio (anonimo).
+ */
+function getAuthToken(): string | null {
+  try {
+    const stored = localStorage.getItem("pb_auth_token");
+    if (stored) return stored;
+  } catch { /* ignore */ }
+  if (PB_TOKEN_STATIC) return PB_TOKEN_STATIC;
+  return null;
+}
+
+function buildHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Accept": "application/json" };
+  const token = getAuthToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function buscarPacientes(opts?: {
+  page?: number;
+  perPage?: number;
+  filter?: string;
+}): Promise<{ items: Paciente[]; totalItems: number; totalPages: number }> {
+  const params = new URLSearchParams({
+    page: String(opts?.page ?? 1),
+    perPage: String(opts?.perPage ?? 500),
+    sort: "-created",
+  });
+
+  if (opts?.filter) {
+    params.set("filter", opts.filter);
+  }
+
+  const url = `${baseUrl()}?${params.toString()}`;
+  const res = await fetch(url, { headers: buildHeaders() });
+
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+
+  const data = await res.json();
+
+  return {
+    items: data.items as Paciente[],
+    totalItems: data.totalItems as number,
+    totalPages: data.totalPages as number,
+  };
+}
+
+export async function buscarPacientePorId(id: string): Promise<Paciente> {
+  const url = `${baseUrl()}/${id}`;
+  const res = await fetch(url, { headers: buildHeaders() });
+
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+
+  return (await res.json()) as Paciente;
+}

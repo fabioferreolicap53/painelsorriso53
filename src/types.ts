@@ -1,44 +1,57 @@
 /**
  * Tipos para o sistema Painel Sorriso 5.3.
- * Inspirado no design do sistema AMAR.
- * Pronto para receber dados do PocketBase no futuro.
+ * Espelha schema da collection painelsorriso53_pacientes no PocketBase.
  */
 
-export type CategoriaPaciente =
-  | "gestante"
-  | "crianca"
-  | "tabagista"
-  | "tuberculose";
+/** Campos booleanos — indicadores de condição do paciente */
+export interface IndicadoresPaciente {
+  gestante: boolean;
+  has: boolean;       // hipertensao arterial sistemica
+  dm: boolean;        // diabetes mellitus
+  hiv: boolean;
+  tb: boolean;        // tuberculose
+  tabagista: boolean;
+  familia_recebe_bf: boolean; // bolsa familia
+}
 
-export type StatusPaciente =
-  | "ativo"
-  | "em_monitoramento"
-  | "concluido"
-  | "alerta";
+/** Registro completo da collection painelsorriso53_pacientes */
+export interface Paciente {
+  id: string;
+  unidade: string;
+  equipe: string;
+  microarea: string;
+  paciente: string;          // nome do paciente
+  n_pront: string;           // numero do prontuario
+  data_de_nascimento: string; // data de nascimento (YYYY-MM-DD)
+  n_cns_da_pessoa_cadastrada: string; // CNS da pessoa
+  gestante: boolean;
+  has: boolean;
+  dm: boolean;
+  hiv: boolean;
+  tb: boolean;
+  tabagista: boolean;
+  familia_recebe_bf: boolean;
+  data_ultima_cons_oriclista: string; // data ultima consulta oriclista
+  collectionId?: string;
+  collectionName?: string;
+  created?: string;
+  updated?: string;
+}
 
-/** Direcao da meta: afeta cor do badge e da progress bar */
+/** Tipo auxiliar para pagina de resumo */
+export type CategoriaPaciente = "gestante" | "crianca" | "tabagista" | "tuberculose";
+
 export type MetaDirection = "diminuir" | "zerar" | "monitorar" | "aumentar";
 
-/** Card de resumo por categoria — espelha layout da imagem */
 export interface CardCategoria {
   categoria: CategoriaPaciente;
   titulo: string;
   meta: MetaDirection;
   valor: number;
   percentual: number;
-  corBorda: string;   // tailwind border-left color
-  corBadge: string;   // tailwind badge bg/text
-  corBarra: string;   // tailwind progress bar bg
+  corBorda: string;
+  corBadge: string;
+  corBarra: string;
   comBusca?: number;
   semBusca?: number;
-}
-
-export interface Paciente {
-  id: string;
-  nome: string;
-  idade: number;
-  categoria: CategoriaPaciente;
-  status: StatusPaciente;
-  ultimaConsulta: string;
-  responsavel?: string;
 }

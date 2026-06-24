@@ -1,29 +1,41 @@
-import { useState } from "react";
-import type { MetaDirection } from "./types";
-import { cardsCategoria, pacientesMock, getCorMeta, getLabelMeta } from "./data";
+import { useState, useEffect } from "react";
+import { configCardsCategoria } from "./data";
+import { buscarPacientes } from "./pocketbase";
 import PaginaPacientes from "./PaginaPacientes";
 import PaginaFavoritos from "./PaginaFavoritos";
 import PaginaAcompanhamentos from "./PaginaAcompanhamentos";
 import PaginaConfiguracoes from "./PaginaConfiguracoes";
+import PaginaLogin from "./PaginaLogin";
 
 // ── Tipos ───────────────────────────────────────────────────────────────
 
 type Pagina = "resumo" | "pacientes" | "favoritos" | "acompanhamentos" | "configuracoes";
+
+interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}
 
 // ── Header Premium ───────────────────────────────────────────────────────
 
 interface HeaderProps {
   pagina: Pagina;
   onNavigate: (p: Pagina) => void;
+  onLogout: () => void;
+  user: AuthUser;
 }
 
-function Header({ pagina, onNavigate }: HeaderProps) {
+function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
   const navItems: { key: Pagina; label: string; icon: string }[] = [
     { key: "resumo", label: "Resumo", icon: "📊" },
     { key: "pacientes", label: "Pacientes", icon: "👥" },
     { key: "favoritos", label: "Favoritos", icon: "⭐" },
     { key: "acompanhamentos", label: "Acompanhamentos", icon: "📋" },
   ];
+
+  const userInitials = (user.name || user.email || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0a1628]/95 backdrop-blur-xl">
@@ -75,10 +87,6 @@ function Header({ pagina, onNavigate }: HeaderProps) {
 
         {/* User + Notificacoes */}
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-xl bg-blue-500/10 px-3 py-1.5 ring-1 ring-blue-500/15 lg:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-xs font-medium text-blue-300">Coordenação</span>
-          </div>
           {/* Engrenagem — configurações */}
           <button
             onClick={() => onNavigate("configuracoes")}
@@ -95,14 +103,24 @@ function Header({ pagina, onNavigate }: HeaderProps) {
           </button>
           <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.04] py-1.5 pl-1.5 pr-3 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.08]">
             <div className="relative">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-xs font-bold text-white shadow-lg shadow-blue-600/20">FS</div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-xs font-bold text-white shadow-lg shadow-blue-600/20">{userInitials}</div>
               <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0a1628] bg-emerald-400" />
             </div>
             <div className="hidden md:block">
-              <p className="text-xs font-semibold text-white">fabioferreir4.53</p>
-              <p className="text-[10px] text-blue-400/50">Administrador</p>
+              <p className="text-xs font-semibold text-white">{user.name || user.email}</p>
+              <p className="text-[10px] text-blue-400/50">{user.role === "admin" ? "Administrador" : "Usuário"}</p>
             </div>
           </div>
+          {/* Logout */}
+          <button
+            onClick={onLogout}
+            title="Sair"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.04] text-blue-300/60 ring-1 ring-white/[0.06] transition-all duration-200 hover:bg-red-500/15 hover:text-red-400 hover:ring-red-500/20"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+            </svg>
+          </button>
         </div>
       </div>
     </header>
@@ -166,7 +184,6 @@ function HeroBanner({ totalPacientes }: { totalPacientes: number }) {
 
 interface CardCategoriaProps {
   titulo: string;
-  meta: MetaDirection;
   valor: number;
   percentual: number;
   corBorda: string;
@@ -175,14 +192,13 @@ interface CardCategoriaProps {
   semBusca?: number;
 }
 
-function CardCategoriaResumo({ titulo, meta, valor, percentual, corBorda, corBarra, comBusca, semBusca }: CardCategoriaProps) {
+function CardCategoriaResumo({ titulo, valor, percentual, corBorda, corBarra, comBusca, semBusca }: CardCategoriaProps) {
   const total = (comBusca ?? 0) + (semBusca ?? 0);
 
   return (
     <div className={`rounded-xl border border-blue-100 border-l-4 ${corBorda} bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md`}>
       <div className="mb-4">
-        <p className="mb-2 text-[11px] font-semibold uppercase leading-tight text-slate-500">{titulo}</p>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${getCorMeta(meta)}`}>{getLabelMeta(meta)}</span>
+        <p className="text-[11px] font-semibold uppercase leading-tight text-slate-500">{titulo}</p>
       </div>
       <div className="mb-3 flex items-baseline justify-between">
         <div>
@@ -226,13 +242,28 @@ function CardCategoriaResumo({ titulo, meta, valor, percentual, corBorda, corBar
 // ── Pagina Resumo ───────────────────────────────────────────────────────
 
 function PaginaResumo() {
+  const [totalPacientes, setTotalPacientes] = useState(0);
+  useEffect(() => {
+    let cancelado = false;
+    async function carregar() {
+      try {
+        const { totalItems } = await buscarPacientes({ perPage: 1 });
+        if (!cancelado) setTotalPacientes(totalItems);
+      } catch {
+        if (!cancelado) setTotalPacientes(0);
+      }
+    }
+    carregar();
+    return () => { cancelado = true; };
+  }, []);
+
   return (
     <>
-      <HeroBanner totalPacientes={pacientesMock.length} />
+      <HeroBanner totalPacientes={totalPacientes} />
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="-mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {cardsCategoria.map((card) => (
-            <CardCategoriaResumo key={card.categoria} titulo={card.titulo} meta={card.meta} valor={card.valor} percentual={card.percentual} corBorda={card.corBorda} corBarra={card.corBarra} comBusca={card.comBusca} semBusca={card.semBusca} />
+          {configCardsCategoria.map((card) => (
+            <CardCategoriaResumo key={card.categoria} titulo={card.titulo} valor={0} percentual={0} corBorda={card.corBorda} corBarra={card.corBarra} />
           ))}
         </div>
       </div>
@@ -244,13 +275,37 @@ function PaginaResumo() {
 
 export default function PainelSorriso53() {
   const [pagina, setPagina] = useState<Pagina>("resumo");
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      const stored = localStorage.getItem("pb_user");
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
+
+  function handleLogin(_token: string, record: AuthUser) {
+    try { localStorage.setItem("pb_user", JSON.stringify(record)); } catch { /* ignore */ }
+    setUser(record);
+  }
+
+  function handleLogout() {
+    try {
+      localStorage.removeItem("pb_auth_token");
+      localStorage.removeItem("pb_user");
+    } catch { /* ignore */ }
+    setUser(null);
+    setPagina("resumo");
+  }
+
+  if (!user) {
+    return <PaginaLogin onLogin={handleLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header pagina={pagina} onNavigate={setPagina} />
+      <Header pagina={pagina} onNavigate={setPagina} onLogout={handleLogout} user={user} />
 
       {pagina === "resumo" && <PaginaResumo />}
-      {pagina === "pacientes" && <PaginaPacientes pacientes={pacientesMock} />}
+      {pagina === "pacientes" && <PaginaPacientes />}
       {pagina === "favoritos" && <PaginaFavoritos />}
       {pagina === "acompanhamentos" && <PaginaAcompanhamentos />}
       {pagina === "configuracoes" && <PaginaConfiguracoes />}
