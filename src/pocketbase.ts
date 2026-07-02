@@ -82,3 +82,22 @@ export async function buscarPacientePorId(id: string): Promise<Paciente> {
 
   return (await res.json()) as Paciente;
 }
+
+export async function atualizarPaciente(
+  id: string,
+  dados: Partial<Paciente>
+): Promise<Paciente> {
+  const url = `${baseUrl()}/${id}`;
+  const headers = { ...buildHeaders(), "Content-Type": "application/json" };
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(dados),
+  });
+
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+
+  return (await res.json()) as Paciente;
+}

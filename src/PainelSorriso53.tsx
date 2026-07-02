@@ -41,7 +41,7 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
     <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0a1628]/95 backdrop-blur-xl">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent" />
 
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+      <div className="mx-auto flex max-w-[1380px] items-center justify-between px-6 py-3">
         {/* Logo */}
         <div className="flex items-center gap-3.5">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 ring-1 ring-blue-400/20">
@@ -63,7 +63,7 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
               <span className="bg-gradient-to-r from-blue-400 to-blue-200 bg-clip-text text-[15px] font-bold tracking-wide text-transparent">SORRISO</span>
               <span className="ml-1 rounded-md bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-bold text-blue-400">5.3</span>
             </div>
-            <p className="mt-px text-[10px] font-medium tracking-wider text-blue-300/50">MONITORAMENTO COMUNITÁRIO</p>
+            <p className="mt-px text-[10px] font-medium tracking-wider text-blue-300/50">MONITORAMENTO DOS GRUPOS PRIORITÁRIOS</p>
           </div>
         </div>
 
@@ -196,41 +196,41 @@ function CardCategoriaResumo({ titulo, valor, percentual, corBorda, corBarra, co
   const total = (comBusca ?? 0) + (semBusca ?? 0);
 
   return (
-    <div className={`rounded-xl border border-blue-100 border-l-4 ${corBorda} bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md`}>
+    <div className={`rounded-xl border border-blue-100 border-l-4 ${corBorda} bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md`}>
       <div className="mb-4">
-        <p className="text-[11px] font-semibold uppercase leading-tight text-slate-500">{titulo}</p>
+        <p className="text-sm font-medium uppercase tracking-wide leading-tight text-slate-500">{titulo}</p>
       </div>
       <div className="mb-3 flex items-baseline justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Absoluto</p>
-          <p className="text-2xl font-bold text-slate-800">{valor.toLocaleString("pt-BR")}</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-slate-400">Absoluto</p>
+          <p className="text-4xl font-bold tracking-tight text-slate-800">{valor.toLocaleString("pt-BR")}</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Percentual</p>
-          <p className="text-2xl font-bold text-slate-800">{percentual}%</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-slate-400">Percentual</p>
+          <p className="text-4xl font-bold tracking-tight text-slate-800">{percentual}%</p>
         </div>
       </div>
-      <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="mb-4 h-3.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full rounded-full ${corBarra} transition-all duration-500`} style={{ width: `${percentual}%` }} />
       </div>
       {total > 0 && (
-        <div className="flex items-center gap-4 border-t border-slate-100 pt-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-600">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+        <div className="flex items-center gap-5 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-600">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
             </span>
             <div>
-              <p className="text-[10px] text-slate-400">Com Busca</p>
-              <p className="text-sm font-bold text-slate-700">{comBusca ?? 0}<span className="ml-1 text-[10px] font-normal text-slate-400">{total > 0 ? Math.round(((comBusca ?? 0) / total) * 100) : 0}%</span></p>
+              <p className="text-sm text-slate-400">Com Busca</p>
+              <p className="text-base font-bold text-slate-700">{comBusca ?? 0}<span className="ml-1 text-sm font-normal text-slate-400">{total > 0 ? Math.round(((comBusca ?? 0) / total) * 100) : 0}%</span></p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-[10px] font-bold text-red-500">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-500">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </span>
             <div>
-              <p className="text-[10px] text-slate-400">Sem Busca</p>
-              <p className="text-sm font-bold text-slate-700">{semBusca ?? 0}<span className="ml-1 text-[10px] font-normal text-slate-400">{total > 0 ? Math.round(((semBusca ?? 0) / total) * 100) : 0}%</span></p>
+              <p className="text-sm text-slate-400">Sem Busca</p>
+              <p className="text-base font-bold text-slate-700">{semBusca ?? 0}<span className="ml-1 text-sm font-normal text-slate-400">{total > 0 ? Math.round(((semBusca ?? 0) / total) * 100) : 0}%</span></p>
             </div>
           </div>
         </div>
@@ -260,7 +260,7 @@ function PaginaResumo() {
   return (
     <>
       <HeroBanner totalPacientes={totalPacientes} />
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1380px] px-4 py-8 sm:px-6 lg:px-8">
         <div className="-mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {configCardsCategoria.map((card) => (
             <CardCategoriaResumo key={card.categoria} titulo={card.titulo} valor={0} percentual={0} corBorda={card.corBorda} corBarra={card.corBarra} />
@@ -311,7 +311,7 @@ export default function PainelSorriso53() {
       {pagina === "configuracoes" && <PaginaConfiguracoes />}
 
       <footer className="border-t border-slate-100 py-4 text-center text-xs text-slate-400">
-        Painel Sorriso 5.3 &mdash; Sistema de Monitoramento Comunitário
+        Painel Sorriso 5.3 &mdash; Sistema de Monitoramento dos Grupos Prioritários
       </footer>
     </div>
   );

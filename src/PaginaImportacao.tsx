@@ -295,7 +295,7 @@ export default function PaginaImportacao() {
         {uploadStatus.stage === "idle" && (
           <div className="rounded-[2.5rem] border border-slate-200/60 bg-white p-8 shadow-sm">
             <p className="text-xl font-black uppercase tracking-tight text-slate-800">Importar CSV</p>
-            <p className="mb-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">Adicione registros a base de pacientes</p>
+            <p className="mb-6 text-xs font-bold uppercase tracking-widest text-slate-400">Adicione registros a base de pacientes</p>
 
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -329,7 +329,7 @@ export default function PaginaImportacao() {
               }}
             />
 
-            <p className="mt-4 text-center text-[10px] text-slate-400">
+            <p className="mt-4 text-center text-xs text-slate-400">
               Formato aceito: .csv &bull; Colecao: {PB_COLLECTION}
             </p>
           </div>
@@ -347,7 +347,7 @@ export default function PaginaImportacao() {
                 <div className="h-3 w-3 rounded-full bg-amber-400 animate-pulse" />
               )}
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+                <p className="text-xs font-black uppercase tracking-widest text-blue-600">
                   {importControl === "paused" ? "PAUSADO" : "IMPORTANDO"}
                 </p>
                 <p className="text-sm text-slate-500">{uploadStatus.fileName}</p>
@@ -369,15 +369,15 @@ export default function PaginaImportacao() {
             {/* Metricas */}
             <div className="mb-5 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tempo</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Tempo</p>
                 <p className="text-sm font-bold text-slate-700">{formatTime(Math.round((Date.now() - importStartTimeRef.current) / 1000))}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Erros</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Erros</p>
                 <p className={`text-sm font-bold ${importProgress.errors > 0 ? "text-red-600" : "text-emerald-600"}`}>{importProgress.errors}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Restante</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Restante</p>
                 <p className="text-sm font-bold text-slate-700">
                   {importProgress.total - importProgress.imported > 0
                     ? `${importProgress.total - importProgress.imported} reg.`
@@ -425,15 +425,15 @@ export default function PaginaImportacao() {
 
             <div className="mb-5 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-white p-3 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Registros</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Registros</p>
                 <p className="text-xl font-bold text-slate-800">{importSummary.total.toLocaleString("pt-BR")}</p>
               </div>
               <div className="rounded-xl bg-white p-3 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Duracao</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Duracao</p>
                 <p className="text-xl font-bold text-slate-800">{formatTime(importSummary.elapsedSec)}</p>
               </div>
               <div className="rounded-xl bg-white p-3 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Falhas</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Falhas</p>
                 <p className={`text-xl font-bold ${importSummary.errors > 0 ? "text-red-600" : "text-emerald-600"}`}>{importSummary.errors}</p>
               </div>
             </div>

@@ -345,7 +345,7 @@ export default function PaginaExclusao() {
               </div>
               <div>
                 <p className="text-lg font-black uppercase tracking-tight text-slate-800">Confirmação de Segurança</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-rose-500">Ação irreversível</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-rose-500">Ação irreversível</p>
               </div>
             </div>
 
@@ -358,7 +358,7 @@ export default function PaginaExclusao() {
 
             {/* Input senha */}
             <div className="relative mb-5">
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
                 Digite sua senha para confirmar
               </label>
               <div className="relative">
@@ -420,7 +420,7 @@ export default function PaginaExclusao() {
             </div>
             <div className="flex-1">
               <p className="text-lg font-black uppercase tracking-tight text-slate-800">Excluir Todos os Pacientes</p>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Ação permanente e irreversível</p>
+              <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Ação permanente e irreversível</p>
               <p className="text-sm text-slate-500">
                 Esta ação remove permanentemente todos os dados da coleção <strong>{PB_COLLECTION}</strong>.
                 Você precisará reimportar os dados via CSV.
@@ -453,7 +453,7 @@ export default function PaginaExclusao() {
               <div className="h-3 w-3 rounded-full bg-amber-400 animate-pulse" />
             )}
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">
+              <p className="text-xs font-black uppercase tracking-widest text-rose-600">
                 {deleteControl === "paused" ? "PAUSADO" : "EXCLUINDO"}
               </p>
               <p className="text-sm text-slate-500">{deleteStatus.message}</p>
@@ -477,15 +477,15 @@ export default function PaginaExclusao() {
           {/* Métricas */}
           <div className="mb-5 grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tempo</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Tempo</p>
               <p className="text-sm font-bold text-slate-700">{formatTime(Math.round((Date.now() - startTimeRef.current) / 1000))}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Erros</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Erros</p>
               <p className={`text-sm font-bold ${deleteProgress.errors > 0 ? "text-rose-600" : "text-emerald-600"}`}>{deleteProgress.errors}</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Estimado</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Estimado</p>
               <p className="text-sm font-bold text-slate-700">{deleteEta}</p>
             </div>
           </div>
@@ -529,15 +529,15 @@ export default function PaginaExclusao() {
 
           <div className="mb-5 grid grid-cols-3 gap-2">
             <div className="rounded-xl bg-white p-3 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Registros</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Registros</p>
               <p className="text-xl font-bold text-slate-800">{deleteSummary.total.toLocaleString("pt-BR")}</p>
             </div>
             <div className="rounded-xl bg-white p-3 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Duração</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Duração</p>
               <p className="text-xl font-bold text-slate-800">{formatTime(deleteSummary.elapsedSec)}</p>
             </div>
             <div className="rounded-xl bg-white p-3 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Falhas</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Falhas</p>
               <p className={`text-xl font-bold ${deleteSummary.errors > 0 ? "text-rose-600" : "text-emerald-600"}`}>{deleteSummary.errors}</p>
             </div>
           </div>

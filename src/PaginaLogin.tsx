@@ -105,7 +105,7 @@ export default function PaginaLogin({ onLogin }: LoginProps) {
               <span className="bg-gradient-to-r from-blue-400 to-blue-200 bg-clip-text text-xl font-bold tracking-wide text-transparent">SORRISO</span>
               <span className="ml-1 rounded-md bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-bold text-blue-400">5.3</span>
             </div>
-            <p className="mt-1 text-[10px] font-medium tracking-wider text-blue-300/40">MONITORAMENTO COMUNITÁRIO</p>
+            <p className="mt-1 text-[10px] font-medium tracking-wider text-blue-300/40">MONITORAMENTO DOS GRUPOS PRIORITÁRIOS</p>
           </div>
 
           {/* Form */}
