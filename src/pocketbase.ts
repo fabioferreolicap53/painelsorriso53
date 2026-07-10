@@ -9,14 +9,32 @@
  * Se nenhum token existir, busca como anonimo (requer API rules publicas).
  */
 
-import type { Paciente } from "./types";
+import type { Paciente, Acompanhamento } from "./types";
 
 const PB_URL = import.meta.env.VITE_POCKETBASE_URL as string;
 const PB_COLLECTION = import.meta.env.VITE_POCKETBASE_COLLECTION as string;
+const PB_FAVORITOS_COLLECTION = "painelsorriso53_favoritos";
+const PB_ACOMPANHAMENTOS_COLLECTION = "painelsorriso53_acompanhamentos";
 const PB_TOKEN_STATIC = import.meta.env.VITE_POCKETBASE_TOKEN as string | undefined;
 
 function baseUrl(): string {
   return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_COLLECTION}/records`;
+}
+
+function favoritosBaseUrl(): string {
+  return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_FAVORITOS_COLLECTION}/records`;
+}
+
+function acompanhamentosBaseUrl(): string {
+  return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_ACOMPANHAMENTOS_COLLECTION}/records`;
+}
+
+export interface FavoritoRecord {
+  id: string;
+  usuario_id: string;
+  paciente_id: string;
+  created?: string;
+  updated?: string;
 }
 
 /**
@@ -83,6 +101,48 @@ export async function buscarPacientePorId(id: string): Promise<Paciente> {
   return (await res.json()) as Paciente;
 }
 
+// ── Favoritos (painelsorriso53_favoritos) ──────────────────────────────
+
+export async function buscarFavoritos(
+  usuarioId: string
+): Promise<FavoritoRecord[]> {
+  const url = `${favoritosBaseUrl()}?filter=${encodeURIComponent(
+    `usuario_id="${usuarioId}"`
+  )}&perPage=500&sort=-created`;
+  const res = await fetch(url, { headers: buildHeaders() });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro favoritos ${res.status}: ${res.statusText}`);
+  }
+  const data = await res.json();
+  return data.items as FavoritoRecord[];
+}
+
+export async function adicionarFavorito(
+  usuarioId: string,
+  pacienteId: string
+): Promise<FavoritoRecord> {
+  const headers = { ...buildHeaders(), "Content-Type": "application/json" };
+  const res = await fetch(favoritosBaseUrl(), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ usuario_id: usuarioId, paciente_id: pacienteId }),
+  });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro favoritos ${res.status}: ${res.statusText}`);
+  }
+  return (await res.json()) as FavoritoRecord;
+}
+
+export async function removerFavorito(favoritoId: string): Promise<void> {
+  const res = await fetch(`${favoritosBaseUrl()}/${favoritoId}`, {
+    method: "DELETE",
+    headers: buildHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro favoritos ${res.status}: ${res.statusText}`);
+  }
+}
+
 export async function atualizarPaciente(
   id: string,
   dados: Partial<Paciente>
@@ -100,4 +160,71 @@ export async function atualizarPaciente(
   }
 
   return (await res.json()) as Paciente;
+}
+
+// ── Acompanhamentos ────────────────────────────────────────────────────
+
+export async function buscarAcompanhamentos(
+  pacienteId: string
+): Promise<Acompanhamento[]> {
+  const url = `${acompanhamentosBaseUrl()}?filter=${encodeURIComponent(
+    `paciente_id="${pacienteId}"`
+  )}&perPage=200&sort=-data_da_busca`;
+  const res = await fetch(url, { headers: buildHeaders() });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+  const data = await res.json();
+  return data.items as Acompanhamento[];
+}
+
+export async function criarAcompanhamento(
+  dados: Omit<Acompanhamento, "id" | "created" | "updated">
+): Promise<Acompanhamento> {
+  const headers = { ...buildHeaders(), "Content-Type": "application/json" };
+  const res = await fetch(acompanhamentosBaseUrl(), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(dados),
+  });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+  return (await res.json()) as Acompanhamento;
+}
+
+export async function atualizarAcompanhamento(
+  id: string,
+  dados: Partial<Omit<Acompanhamento, "id" | "created" | "updated">>
+): Promise<Acompanhamento> {
+  const headers = { ...buildHeaders(), "Content-Type": "application/json" };
+  const res = await fetch(`${acompanhamentosBaseUrl()}/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(dados),
+  });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+  return (await res.json()) as Acompanhamento;
+}
+
+export async function buscarTodosAcompanhamentos(): Promise<Acompanhamento[]> {
+  const url = `${acompanhamentosBaseUrl()}?perPage=500&sort=-created`;
+  const res = await fetch(url, { headers: buildHeaders() });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
+  const data = await res.json();
+  return data.items as Acompanhamento[];
+}
+
+export async function excluirAcompanhamento(id: string): Promise<void> {
+  const res = await fetch(`${acompanhamentosBaseUrl()}/${id}`, {
+    method: "DELETE",
+    headers: buildHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
+  }
 }

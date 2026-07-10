@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup:favorito": "node scripts/add-favorito-field.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.1",
@@ -19,6 +20,7 @@
     "vite": "^8.1.0"
   },
   "dependencies": {
+    "echarts": "^6.1.0",
     "papaparse": "^5.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

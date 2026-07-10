@@ -32,6 +32,7 @@ export interface Paciente {
   tabagista: boolean;
   familia_recebe_bf: boolean;
   data_ultima_cons_oriclista: string; // data ultima consulta oriclista
+  data_ultima_cons_dentista: string;  // data ultima consulta dentista
   collectionId?: string;
   collectionName?: string;
   created?: string;
@@ -54,4 +55,20 @@ export interface CardCategoria {
   corBarra: string;
   comBusca?: number;
   semBusca?: number;
+}
+
+/** Registro de acompanhamento (follow-up) do paciente */
+export interface Acompanhamento {
+  id: string;
+  paciente_id: string;
+  usuario_id: string;
+  data_da_busca: string;
+  tipo_busca: string;
+  tipo_contato: string;
+  entrave_informado_por: string;
+  situacao_pos_busca: string;
+  entraves_identificados: string;
+  observacoes: string;
+  created?: string;
+  updated?: string;
 }
