@@ -172,6 +172,16 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
   const [filtroEquipe, setFiltroEquipe] = useState<string>("todas");
   const [filtroMicroarea, setFiltroMicroarea] = useState<string>("todas");
   const [filtroStatus, setFiltroStatus] = useState<string>("todas");
+  const [filtroUnidadeDraft, setFiltroUnidadeDraft] = useState<string>("todas");
+  const [filtroEquipeDraft, setFiltroEquipeDraft] = useState<string>("todas");
+  const [filtroMicroareaDraft, setFiltroMicroareaDraft] = useState<string>("todas");
+  const [filtroStatusDraft, setFiltroStatusDraft] = useState<string>("todas");
+  const [filtroGrupoDraft, setFiltroGrupoDraft] = useState<string>("todos");
+
+  const filtrosAtivos = [filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus]
+    .filter((v) => v !== "todas").length
+    + (filtro !== "todos" ? 1 : 0);
+
   const [mostrarBusca, setMostrarBusca] = useState(false);
   const [mostrarAvancada, setMostrarAvancada] = useState(false);
   const unidades = [...new Set(favoritos.map(p => p.unidade).filter(Boolean))].sort();
@@ -409,11 +419,27 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
             </button>
             <button
-              onClick={() => { setMostrarAvancada(!mostrarAvancada); setMostrarBusca(false); }}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-200 hover:bg-white/10 hover:text-white/70 ${mostrarAvancada ? "bg-white/10 text-white/70" : "text-white/40"}`}
-              title="Busca avançada"
+              onClick={() => {
+                setMostrarAvancada(!mostrarAvancada);
+                setMostrarBusca(false);
+                if (!mostrarAvancada) {
+                  setFiltroUnidadeDraft(filtroUnidade);
+                  setFiltroEquipeDraft(filtroEquipe);
+                  setFiltroMicroareaDraft(filtroMicroarea);
+                  setFiltroStatusDraft(filtroStatus);
+                  setFiltroGrupoDraft(filtro);
+                }
+              }}
+              className={`flex items-center gap-1.5 rounded-lg transition-all duration-200 hover:bg-white/10 hover:text-white/70 px-2.5 py-1.5 ${mostrarAvancada ? "bg-white/10 text-white/70" : "text-white/40"}`}
+              title="Filtros Avançados"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" /></svg>
+              <span className="text-[10px] font-bold uppercase tracking-wider">Filtros</span>
+              {filtrosAtivos > 0 && !mostrarAvancada && (
+                <span className="ml-0.5 rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[9px] font-bold text-cyan-300 ring-1 ring-cyan-400/30">
+                  {filtrosAtivos}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -455,8 +481,8 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               <div>
                 <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-white/40">Unidade</label>
                 <select
-                  value={filtroUnidade}
-                  onChange={(e) => setFiltroUnidade(e.target.value)}
+                  value={filtroUnidadeDraft}
+                  onChange={(e) => setFiltroUnidadeDraft(e.target.value)}
                   className="w-full rounded-lg bg-white/[0.07] border border-white/10 px-3 py-2 text-xs font-medium text-white outline-none transition-all focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 [&>option]:bg-slate-800 [&>option]:text-white"
                 >
                   <option value="todas">Todas</option>
@@ -466,8 +492,8 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               <div>
                 <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-white/40">Equipe</label>
                 <select
-                  value={filtroEquipe}
-                  onChange={(e) => setFiltroEquipe(e.target.value)}
+                  value={filtroEquipeDraft}
+                  onChange={(e) => setFiltroEquipeDraft(e.target.value)}
                   className="w-full rounded-lg bg-white/[0.07] border border-white/10 px-3 py-2 text-xs font-medium text-white outline-none transition-all focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 [&>option]:bg-slate-800 [&>option]:text-white"
                 >
                   <option value="todas">Todas</option>
@@ -477,8 +503,8 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               <div>
                 <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-white/40">Microárea</label>
                 <select
-                  value={filtroMicroarea}
-                  onChange={(e) => setFiltroMicroarea(e.target.value)}
+                  value={filtroMicroareaDraft}
+                  onChange={(e) => setFiltroMicroareaDraft(e.target.value)}
                   className="w-full rounded-lg bg-white/[0.07] border border-white/10 px-3 py-2 text-xs font-medium text-white outline-none transition-all focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 [&>option]:bg-slate-800 [&>option]:text-white"
                 >
                   <option value="todas">Todas</option>
@@ -488,8 +514,8 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               <div>
                 <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-white/40">Grupo</label>
                 <select
-                  value={filtro}
-                  onChange={(e) => setFiltro(e.target.value)}
+                  value={filtroGrupoDraft}
+                  onChange={(e) => setFiltroGrupoDraft(e.target.value)}
                   className="w-full rounded-lg bg-white/[0.07] border border-white/10 px-3 py-2 text-xs font-medium text-white outline-none transition-all focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20 [&>option]:bg-slate-800 [&>option]:text-white"
                 >
                   <option value="todos">Todos</option>
@@ -521,23 +547,48 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                 ].map((s) => (
                   <button
                     key={s.key}
-                    onClick={() => setFiltroStatus(filtroStatus === s.key ? "todas" : s.key)}
+                    onClick={() => setFiltroStatusDraft(filtroStatusDraft === s.key ? "todas" : s.key)}
                     className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
-                      filtroStatus === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
+                      filtroStatusDraft === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
                     }`}
                   >
-                    {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatus === s.key ? s.dot : "bg-white/20"}`} />}
-                    <span className={filtroStatus === s.key ? "" : "text-white/60"}>{s.label}</span>
+                    {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
+                    <span className={filtroStatusDraft === s.key ? "" : "text-white/60"}>{s.label}</span>
                   </button>
                 ))}
               </div>
             </div>
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex items-center justify-between">
               <button
-                onClick={() => { setFiltroUnidade("todas"); setFiltroEquipe("todas"); setFiltroMicroarea("todas"); setFiltro("todos"); setFiltroStatus("todas"); }}
+                onClick={() => {
+                  setFiltroUnidadeDraft("todas");
+                  setFiltroEquipeDraft("todas");
+                  setFiltroMicroareaDraft("todas");
+                  setFiltroGrupoDraft("todos");
+                  setFiltroStatusDraft("todas");
+                  setFiltroUnidade("todas");
+                  setFiltroEquipe("todas");
+                  setFiltroMicroarea("todas");
+                  setFiltro("todos");
+                  setFiltroStatus("todas");
+                  setMostrarAvancada(false);
+                }}
                 className="rounded-lg bg-white/[0.07] border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
               >
                 Limpar Filtros
+              </button>
+              <button
+                onClick={() => {
+                  setFiltroUnidade(filtroUnidadeDraft);
+                  setFiltroEquipe(filtroEquipeDraft);
+                  setFiltroMicroarea(filtroMicroareaDraft);
+                  setFiltro(filtroGrupoDraft);
+                  setFiltroStatus(filtroStatusDraft);
+                  setMostrarAvancada(false);
+                }}
+                className="rounded-lg bg-cyan-400/20 border border-cyan-400/30 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-300 shadow-sm transition-all hover:bg-cyan-400/30"
+              >
+                Aplicar Filtros
               </button>
             </div>
           </div>

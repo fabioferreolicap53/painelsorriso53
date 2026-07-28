@@ -122,6 +122,10 @@ export default function PaginaResumo() {
   const [acomps, setAcomps] = useState<Acompanhamento[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>("todas");
+  const [filtroStatusDraft, setFiltroStatusDraft] = useState<string>("todas");
+  const [mostrarAvancada, setMostrarAvancada] = useState(false);
+
+  const filtrosAtivos = filtroStatus !== "todas" ? 1 : 0;
 
   useEffect(() => {
     let cancel = false;
@@ -472,40 +476,89 @@ export default function PaginaResumo() {
         </div>
       </div>
 
-      {/* ── Filtro por Status ───────────────────────────────────────── */}
+      {/* ── Toggle Filtro por Status ────────────────────────────────── */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950">
         <div className="mx-auto max-w-[1380px] px-5 sm:px-6 pb-4">
-          <div className="rounded-xl bg-white/[0.05] p-3.5 ring-1 ring-white/10">
-            <label className="mb-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40">
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          {/* Botão toggle */}
+          <button
+            onClick={() => {
+              setMostrarAvancada(!mostrarAvancada);
+              if (!mostrarAvancada) setFiltroStatusDraft(filtroStatus);
+            }}
+            className="flex w-full items-center justify-between rounded-xl bg-white/[0.05] px-3.5 py-2.5 ring-1 ring-white/10 transition-all hover:bg-white/[0.08]"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="h-3.5 w-3.5 text-white/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
               </svg>
-              Filtrar por Situação Pós-Busca
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
-                { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
-                { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
-                { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
-                { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
-                { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
-                { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
-                { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
-              ].map((s) => (
-                <button
-                  key={s.key}
-                  onClick={() => setFiltroStatus(filtroStatus === s.key ? "todas" : s.key)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
-                    filtroStatus === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
-                  }`}
-                >
-                  {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatus === s.key ? s.dot : "bg-white/20"}`} />}
-                  <span className={filtroStatus === s.key ? "" : "text-white/60"}>{s.label}</span>
-                </button>
-              ))}
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                Filtrar por Situação Pós-Busca
+              </span>
             </div>
-          </div>
+            <div className="flex items-center gap-2">
+              {filtrosAtivos > 0 && !mostrarAvancada && (
+                <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[9px] font-bold text-cyan-300 ring-1 ring-cyan-400/30">
+                  {filtrosAtivos} ativo{filtrosAtivos !== 1 ? "s" : ""}
+                </span>
+              )}
+              <svg className={`h-4 w-4 text-white/40 transition-transform duration-200 ${mostrarAvancada ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Painel de filtros (expansível) */}
+          {mostrarAvancada && (
+            <div className="mt-3 rounded-xl bg-white/[0.05] p-3.5 ring-1 ring-white/10">
+              <label className="mb-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40">
+                Selecione o status
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
+                  { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
+                  { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
+                  { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
+                  { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
+                  { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
+                  { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
+                  { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
+                ].map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setFiltroStatusDraft(filtroStatusDraft === s.key ? "todas" : s.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                      filtroStatusDraft === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
+                    }`}
+                  >
+                    {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
+                    <span className={filtroStatusDraft === s.key ? "" : "text-white/60"}>{s.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
+                <button
+                  onClick={() => {
+                    setFiltroStatusDraft("todas");
+                    setFiltroStatus("todas");
+                    setMostrarAvancada(false);
+                  }}
+                  className="rounded-lg bg-white/[0.07] border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
+                >
+                  Limpar Filtro
+                </button>
+                <button
+                  onClick={() => {
+                    setFiltroStatus(filtroStatusDraft);
+                    setMostrarAvancada(false);
+                  }}
+                  className="rounded-lg bg-cyan-400/20 border border-cyan-400/30 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-300 shadow-sm transition-all hover:bg-cyan-400/30"
+                >
+                  Aplicar Filtro
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
