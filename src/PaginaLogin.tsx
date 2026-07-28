@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SmileIcon from "./SmileIcon";
 
 /**
  * Tela de autenticação — login via PocketBase REST API.
@@ -86,10 +87,8 @@ export default function PaginaLogin({ onLogin }: LoginProps) {
         <div className="relative rounded-[3rem] bg-white border border-slate-200 shadow-2xl shadow-slate-200/60 p-8 sm:p-12">
           {/* Logo */}
           <div className="mb-10 flex flex-col items-center text-center">
-            <div className="relative mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-600 shadow-xl shadow-blue-500/20">
-              <svg viewBox="0 0 32 32" fill="none" className="relative h-11 w-11">
-                <path d="M16 3C11.5 3 8 5 8 9c0 2 .8 3.5 1.5 5.5C10.5 16.5 11 19 11 22c0 3 2 7 5 7s5-4 5-7c0-3 .5-5.5 1.5-7.5C23.2 12.5 24 11 24 9c0-4-3.5-6-8-6z" fill="white" />
-              </svg>
+            <div className="relative mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-b from-cyan-400 to-blue-400 shadow-xl shadow-cyan-500/20 ring-1 ring-white/20">
+              <SmileIcon className="h-12 w-12" />
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-black tracking-tight text-slate-900">PAINEL</span>

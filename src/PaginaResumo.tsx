@@ -121,6 +121,7 @@ export default function PaginaResumo() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [acomps, setAcomps] = useState<Acompanhamento[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [filtroStatus, setFiltroStatus] = useState<string>("todas");
 
   useEffect(() => {
     let cancel = false;
@@ -149,7 +150,9 @@ export default function PaginaResumo() {
   };
   const pacientesPrioritarios = pacientes.filter(isPrioritario);
   const idsPrioritarios = new Set(pacientesPrioritarios.map((p) => p.id));
-  const acompsPrioritarios = acomps.filter((a) => idsPrioritarios.has(a.paciente_id));
+  const acompsPrioritarios = acomps
+    .filter((a) => idsPrioritarios.has(a.paciente_id))
+    .filter((a) => filtroStatus === "todas" || (filtroStatus === "PENDENTE" ? !a.situacao_pos_busca : a.situacao_pos_busca === filtroStatus));
 
   const totalPacientes = pacientesPrioritarios.length;
   const totalAcomps = acompsPrioritarios.length;
@@ -465,6 +468,43 @@ export default function PaginaResumo() {
             </svg>
             <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Total Pacientes</span>
             <span className="text-2xl font-black text-white tabular-nums leading-none">{totalPacientes.toLocaleString("pt-BR")}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filtro por Status ───────────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950">
+        <div className="mx-auto max-w-[1380px] px-5 sm:px-6 pb-4">
+          <div className="rounded-xl bg-white/[0.05] p-3.5 ring-1 ring-white/10">
+            <label className="mb-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+              </svg>
+              Filtrar por Situação Pós-Busca
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
+                { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
+                { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
+                { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
+                { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
+                { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
+                { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
+                { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
+              ].map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setFiltroStatus(filtroStatus === s.key ? "todas" : s.key)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                    filtroStatus === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
+                  }`}
+                >
+                  {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatus === s.key ? s.dot : "bg-white/20"}`} />}
+                  <span className={filtroStatus === s.key ? "" : "text-white/60"}>{s.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

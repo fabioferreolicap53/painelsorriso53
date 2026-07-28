@@ -5,6 +5,7 @@ import PaginaFavoritos from "./PaginaFavoritos";
 import PaginaAcompanhamentos from "./PaginaAcompanhamentos";
 import PaginaConfiguracoes from "./PaginaConfiguracoes";
 import PaginaLogin from "./PaginaLogin";
+import SmileIcon from "./SmileIcon";
 
 // ── Tipos ───────────────────────────────────────────────────────────────
 
@@ -75,15 +76,16 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
 
           {/* Logo texto — mobile compacto (< sm) */}
           <div className="sm:hidden">
-            <div className="flex items-baseline gap-1">
-              <span className="text-sm font-bold tracking-wide text-white/90">PS</span>
+            <div className="flex items-center gap-1.5">
+              <SmileIcon className="h-6 w-6" />
               <span className="rounded-md bg-white/10 px-1 py-0.5 text-[9px] font-bold text-cyan-300">5.3</span>
             </div>
           </div>
 
           {/* Logo texto — completo (sm+) */}
           <div className="hidden sm:block min-w-0">
-            <div className="flex items-baseline gap-1.5 flex-nowrap">
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              <SmileIcon className="h-5 w-5 sm:h-6 sm:w-6" />
               <span className="text-[13px] sm:text-[15px] font-bold tracking-wide text-white/90 whitespace-nowrap">PAINEL</span>
               <span className="bg-gradient-to-r from-cyan-300 to-blue-300 bg-clip-text text-[13px] sm:text-[15px] font-bold tracking-wide text-transparent whitespace-nowrap">SORRISO</span>
               <span className="ml-0.5 sm:ml-1 rounded-md bg-white/10 px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold text-cyan-300 flex-shrink-0">5.3</span>
@@ -155,9 +157,7 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
           {/* Drawer header */}
           <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-400 text-slate-900 text-sm font-black shadow-lg">
-                S5
-              </div>
+              <SmileIcon className="h-9 w-9" />
               <div>
                 <span className="text-sm font-bold tracking-wide text-white/90">PAINEL SORRISO</span>
                 <p className="text-[9px] font-bold tracking-wider text-cyan-300">5.3</p>
@@ -291,6 +291,7 @@ export default function PainelSorriso53() {
       <footer className="mt-auto border-t border-slate-200 bg-white py-8 text-center">
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center gap-1.5 opacity-40">
+            <SmileIcon className="h-5 w-5" />
             <span className="text-xs font-black uppercase tracking-widest text-slate-900">PAINEL</span>
             <span className="text-xs font-black uppercase tracking-widest text-blue-600">SORRISO</span>
             <span className="text-[10px] font-bold">5.3</span>

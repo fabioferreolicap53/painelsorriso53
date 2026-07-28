@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Paciente } from "./types";
-import { buscarPacientes, atualizarPaciente, buscarFavoritos, adicionarFavorito, removerFavorito, buscarTodosAcompanhamentos } from "./pocketbase";
+import { buscarPacientes, buscarFavoritos, adicionarFavorito, removerFavorito, buscarTodosAcompanhamentos } from "./pocketbase";
 import { getCoresCategoria } from "./data";
 import ModalAcompanhamento from "./ModalAcompanhamento";
 import ModalDetalhes from "./ModalDetalhes";
@@ -92,135 +92,6 @@ function renderGruposPrioritarios(p: Paciente) {
   );
 }
 
-// ── Calendário PT-BR customizado ────────────────────────────────────────
-
-const MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-const ANOS_RANGE = Array.from({ length: new Date().getFullYear() - 1950 + 6 }, (_, i) => 1950 + i);
-
-function parseData(str: string): { d: number; m: number; y: number } | null {
-  if (!str) return null;
-  const m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  return { y: Number(m[1]), m: Number(m[2]) - 1, d: Number(m[3]) };
-}
-
-function toISO(y: number, m: number, d: number): string {
-  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-}
-
-function toDisplay(iso: string): string {
-  const p = parseData(iso);
-  if (!p) return "";
-  return `${String(p.d).padStart(2, "0")}/${String(p.m + 1).padStart(2, "0")}/${p.y}`;
-}
-
-/** Mini calendário popup com dropdowns de mês/ano + grid de dias */
-function CalendarioPopup({
-  valor,
-  onSelecionar,
-  onFechar,
-}: {
-  valor: string;
-  onSelecionar: (data: string) => void;
-  onFechar: () => void;
-}) {
-  const parsed = parseData(valor);
-  const hoje = new Date();
-  const [ano, setAno] = useState(parsed?.y ?? hoje.getFullYear());
-  const [mes, setMes] = useState(parsed?.m ?? hoje.getMonth());
-
-  const primeiroDia = new Date(ano, mes, 1).getDay();
-  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
-  const diaSel = parsed?.d ?? 0;
-  const mesSel = parsed?.m ?? -1;
-  const anoSel = parsed?.y ?? -1;
-
-  const dias: (number | null)[] = [
-    ...Array(primeiroDia).fill(null),
-    ...Array.from({ length: diasNoMes }, (_, i) => i + 1),
-  ];
-
-  function prevMes() {
-    if (mes === 0) { setMes(11); setAno(ano - 1); }
-    else setMes(mes - 1);
-  }
-  function nextMes() {
-    if (mes === 11) { setMes(0); setAno(ano + 1); }
-    else setMes(mes + 1);
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xl shadow-slate-200/40" style={{ minWidth: 220 }}>
-      {/* Header — dropdowns de mês/ano + navegação */}
-      <div className="mb-2 flex items-center justify-between gap-1">
-        <button onClick={prevMes} className="rounded p-0.5 text-slate-400 hover:bg-slate-50">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
-        </button>
-        <div className="flex items-center gap-1">
-          <select
-            value={mes}
-            onChange={(e) => setMes(Number(e.target.value))}
-            className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs font-bold text-slate-800 cursor-pointer hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          >
-            {MESES_PT.map((nome, idx) => (
-              <option key={idx} value={idx}>{nome}</option>
-            ))}
-          </select>
-          <select
-            value={ano}
-            onChange={(e) => setAno(Number(e.target.value))}
-            className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs font-bold text-slate-800 cursor-pointer hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          >
-            {ANOS_RANGE.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-        </div>
-        <button onClick={nextMes} className="rounded p-0.5 text-slate-400 hover:bg-slate-50">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
-        </button>
-      </div>
-
-      {/* Grid de dias */}
-      <div className="mb-1 grid grid-cols-7 gap-0.5">
-        {DIAS_SEMANA.map((d) => (
-          <div key={d} className="py-0.5 text-center text-[9px] font-semibold text-slate-400">{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5">
-        {dias.map((dia, i) => {
-          if (dia === null) return <div key={`e${i}`} />;
-          const selecionado = dia === diaSel && mes === mesSel && ano === anoSel;
-          const ehHoje = dia === hoje.getDate() && mes === hoje.getMonth() && ano === hoje.getFullYear();
-          return (
-            <button
-              key={dia}
-              onClick={() => { onSelecionar(toISO(ano, mes, dia)); onFechar(); }}
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] transition-colors ${
-                selecionado ? "bg-gradient-to-r from-blue-600 to-cyan-500 font-bold text-white"
-                : ehHoje ? "ring-2 ring-blue-500 text-blue-600"
-                : "text-slate-600 hover:bg-blue-50 hover:text-blue-600"
-              }`}
-            >
-              {dia}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Limpar + Hoje */}
-      <div className="mt-1.5 flex items-center justify-between border-t border-slate-100 pt-1.5">
-        <button onClick={() => { onSelecionar(""); onFechar(); }} className="text-[10px] text-slate-400 hover:text-red-500">Limpar</button>
-        <button
-          onClick={() => { onSelecionar(toISO(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())); onFechar(); }}
-          className="text-[10px] font-semibold text-blue-600 hover:text-blue-700"
-        >Hoje</button>
-      </div>
-    </div>
-  );
-}
-
 // ── Badge de Status/Desfecho ──────────────────────────────────────────
 
 function StatusBadge({ item, small }: { item?: { desfecho: string; dataBusca: string; dataAgendamento: string }; small?: boolean }) {
@@ -301,6 +172,7 @@ export default function PaginaPacientes({ usuarioId, onNavigateAcompFiltered }: 
   const [filtroUnidade, setFiltroUnidade] = useState<string>("todas");
   const [filtroEquipe, setFiltroEquipe] = useState<string>("todas");
   const [filtroMicroarea, setFiltroMicroarea] = useState<string>("todas");
+  const [filtroStatus, setFiltroStatus] = useState<string>("todas");
   const [mostrarBusca, setMostrarBusca] = useState(false);
   const [mostrarAvancada, setMostrarAvancada] = useState(false);
   const unidades = [...new Set(pacientes.map(p => p.unidade).filter(Boolean))].sort();
@@ -466,8 +338,11 @@ export default function PaginaPacientes({ usuarioId, onNavigateAcompFiltered }: 
     const matchUnidade = filtroUnidade === "todas" || p.unidade === filtroUnidade;
     const matchEquipe = filtroEquipe === "todas" || p.equipe === filtroEquipe;
     const matchMicroarea = filtroMicroarea === "todas" || p.microarea === filtroMicroarea;
+    const matchStatus = filtroStatus === "todas"
+      || (filtroStatus === "PENDENTE" && !lastDesfechoMap[p.id]?.desfecho)
+      || lastDesfechoMap[p.id]?.desfecho === filtroStatus;
 
-    return matchBusca && matchFiltro && matchUnidade && matchEquipe && matchMicroarea;
+    return matchBusca && matchFiltro && matchUnidade && matchEquipe && matchMicroarea && matchStatus;
   });
 
   const filtradosSorted = [...filtrados].sort((a, b) => {
@@ -495,7 +370,7 @@ export default function PaginaPacientes({ usuarioId, onNavigateAcompFiltered }: 
     }
   };
 
-  useEffect(() => { setPagina(1); }, [busca, filtro, filtroUnidade, filtroEquipe, filtroMicroarea, sortField]);
+  useEffect(() => { setPagina(1); }, [busca, filtro, filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus, sortField]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -634,9 +509,41 @@ export default function PaginaPacientes({ usuarioId, onNavigateAcompFiltered }: 
                 </select>
               </div>
             </div>
+            {/* ── Filtro por Status ───────────────────────────────────── */}
+            <div className="mt-4 border-t border-white/[0.06] pt-4">
+              <label className="mb-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                </svg>
+                Último Status
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
+                  { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
+                  { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
+                  { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
+                  { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
+                  { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
+                  { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
+                  { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
+                ].map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setFiltroStatus(filtroStatus === s.key ? "todas" : s.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                      filtroStatus === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
+                    }`}
+                  >
+                    {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatus === s.key ? s.dot : "bg-white/20"}`} />}
+                    <span className={filtroStatus === s.key ? "" : "text-white/60"}>{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-3 flex justify-end">
               <button
-                onClick={() => { setFiltroUnidade("todas"); setFiltroEquipe("todas"); setFiltroMicroarea("todas"); setFiltro("todos"); }}
+                onClick={() => { setFiltroUnidade("todas"); setFiltroEquipe("todas"); setFiltroMicroarea("todas"); setFiltro("todos"); setFiltroStatus("todas"); }}
                 className="rounded-lg bg-white/[0.07] border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
               >
                 Limpar Filtros

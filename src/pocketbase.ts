@@ -86,7 +86,7 @@ export async function buscarPacientes(opts?: {
 
 export async function buscarFavoritos(
   usuarioId: string
-): Promise<FavoritoRecord[]> {
+): Promise<{ id: string; usuario_id: string; paciente_id: string }[]> {
   const url = `${favoritosBaseUrl()}?filter=${encodeURIComponent(
     `usuario_id="${usuarioId}"`
   )}&perPage=500&sort=-created`;
@@ -95,13 +95,13 @@ export async function buscarFavoritos(
     throw new Error(`PocketBase erro favoritos ${res.status}: ${res.statusText}`);
   }
   const data = await res.json();
-  return data.items as FavoritoRecord[];
+  return data.items as { id: string; usuario_id: string; paciente_id: string }[];
 }
 
 export async function adicionarFavorito(
   usuarioId: string,
   pacienteId: string
-): Promise<FavoritoRecord> {
+): Promise<{ id: string; usuario_id: string; paciente_id: string }> {
   const headers = { ...buildHeaders(), "Content-Type": "application/json" };
   const res = await fetch(favoritosBaseUrl(), {
     method: "POST",
@@ -111,7 +111,7 @@ export async function adicionarFavorito(
   if (!res.ok) {
     throw new Error(`PocketBase erro favoritos ${res.status}: ${res.statusText}`);
   }
-  return (await res.json()) as FavoritoRecord;
+  return (await res.json()) as { id: string; usuario_id: string; paciente_id: string };
 }
 
 export async function removerFavorito(favoritoId: string): Promise<void> {
