@@ -42,21 +42,6 @@ export interface Paciente {
 /** Tipo auxiliar para pagina de resumo */
 export type CategoriaPaciente = "gestante" | "crianca" | "tabagista" | "tuberculose";
 
-export type MetaDirection = "diminuir" | "zerar" | "monitorar" | "aumentar";
-
-export interface CardCategoria {
-  categoria: CategoriaPaciente;
-  titulo: string;
-  meta: MetaDirection;
-  valor: number;
-  percentual: number;
-  corBorda: string;
-  corBadge: string;
-  corBarra: string;
-  comBusca?: number;
-  semBusca?: number;
-}
-
 /** Registro de acompanhamento (follow-up) do paciente */
 export interface Acompanhamento {
   id: string;
@@ -69,6 +54,7 @@ export interface Acompanhamento {
   situacao_pos_busca: string;
   entraves_identificados: string;
   observacoes: string;
+  data_agendamento_apos_contato_direto?: string; // data do agendamento (quando situacao = "AGENDAMENTO APÓS CONTATO DIRETO")
   created?: string;
   updated?: string;
 }

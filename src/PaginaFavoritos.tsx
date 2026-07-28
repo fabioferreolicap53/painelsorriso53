@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Paciente } from "./types";
-import { buscarPacientes, buscarFavoritos, removerFavorito, atualizarPaciente, buscarTodosAcompanhamentos } from "./pocketbase";
+import { buscarPacientes, buscarFavoritos, removerFavorito, buscarTodosAcompanhamentos } from "./pocketbase";
 import { getCoresCategoria } from "./data";
 import ModalAcompanhamento from "./ModalAcompanhamento";
+import ModalDetalhes from "./ModalDetalhes";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -90,264 +91,48 @@ function renderGruposPrioritarios(p: Paciente) {
   );
 }
 
-// ── Calendário PT-BR customizado ────────────────────────────────────────
+// ── Badge de Status/Desfecho ──────────────────────────────────────────
 
-const MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-const ANOS_RANGE = Array.from({ length: new Date().getFullYear() - 1950 + 6 }, (_, i) => 1950 + i);
+function StatusBadge({ item, small }: { item?: { desfecho: string; dataBusca: string; dataAgendamento: string }; small?: boolean }) {
+  const formatarData = (d: string) => {
+    if (!d) return "—";
+    const m = d.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : d;
+  };
 
-function parseData(str: string): { d: number; m: number; y: number } | null {
-  if (!str) return null;
-  const m = str.match(/(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  return { y: Number(m[1]), m: Number(m[2]) - 1, d: Number(m[3]) };
-}
-
-function toISO(y: number, m: number, d: number): string {
-  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-}
-
-function toDisplay(iso: string): string {
-  const p = parseData(iso);
-  if (!p) return "";
-  return `${String(p.d).padStart(2, "0")}/${String(p.m + 1).padStart(2, "0")}/${p.y}`;
-}
-
-/** Mini calendário popup com dropdowns de mês/ano + grid de dias */
-function CalendarioPopup({
-  valor,
-  onSelecionar,
-  onFechar,
-}: {
-  valor: string;
-  onSelecionar: (data: string) => void;
-  onFechar: () => void;
-}) {
-  const parsed = parseData(valor);
-  const hoje = new Date();
-  const [ano, setAno] = useState(parsed?.y ?? hoje.getFullYear());
-  const [mes, setMes] = useState(parsed?.m ?? hoje.getMonth());
-
-  const primeiroDia = new Date(ano, mes, 1).getDay();
-  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
-  const diaSel = parsed?.d ?? 0;
-  const mesSel = parsed?.m ?? -1;
-  const anoSel = parsed?.y ?? -1;
-
-  const dias: (number | null)[] = [
-    ...Array(primeiroDia).fill(null),
-    ...Array.from({ length: diasNoMes }, (_, i) => i + 1),
-  ];
-
-  function prevMes() {
-    if (mes === 0) { setMes(11); setAno(ano - 1); }
-    else setMes(mes - 1);
+  if (!item || !item.desfecho) {
+    return (
+      <div className="flex flex-col items-center gap-0.5 text-center">
+        <span className={`inline-flex flex-wrap items-center justify-center rounded-full bg-slate-100 text-slate-500 font-bold uppercase tracking-wider ring-1 ring-slate-200/60 text-center ${small ? "px-2 py-0.5 text-[7px]" : "px-3 py-1 text-[10px]"}`}>
+          Pendente
+        </span>
+        <span className={`text-slate-400 font-medium ${small ? "text-[6px]" : "text-[8px]"}`}>Sem busca</span>
+      </div>
+    );
   }
-  function nextMes() {
-    if (mes === 11) { setMes(0); setAno(ano + 1); }
-    else setMes(mes + 1);
-  }
+
+  const cores: Record<string, { bg: string; text: string; ring: string }> = {
+    "AGENDAMENTO APÓS CONTATO DIRETO": { bg: "bg-emerald-50", text: "text-emerald-700", ring: "ring-emerald-200/60" },
+    "CONVITE PARA DEMANDA LIVRE": { bg: "bg-cyan-50", text: "text-cyan-700", ring: "ring-cyan-200/60" },
+    "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)": { bg: "bg-blue-50", text: "text-blue-700", ring: "ring-blue-200/60" },
+    "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)": { bg: "bg-slate-100", text: "text-slate-600", ring: "ring-slate-200/60" },
+    "NÃO LOCALIZADA": { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200/60" },
+    "RECUSA": { bg: "bg-red-50", text: "text-red-700", ring: "ring-red-200/60" },
+  };
+  const c = cores[item.desfecho] || { bg: "bg-slate-50", text: "text-slate-600", ring: "ring-slate-200/60" };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xl shadow-slate-200/40" style={{ minWidth: 220 }}>
-      {/* Header — dropdowns de mês/ano + navegação */}
-      <div className="mb-2 flex items-center justify-between gap-1">
-        <button onClick={prevMes} className="rounded p-0.5 text-slate-400 hover:bg-slate-50">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/></svg>
-        </button>
-        <div className="flex items-center gap-1">
-          <select
-            value={mes}
-            onChange={(e) => setMes(Number(e.target.value))}
-            className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs font-bold text-slate-800 cursor-pointer hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          >
-            {MESES_PT.map((nome, idx) => (
-              <option key={idx} value={idx}>{nome}</option>
-            ))}
-          </select>
-          <select
-            value={ano}
-            onChange={(e) => setAno(Number(e.target.value))}
-            className="rounded border border-slate-200 bg-white px-1 py-0.5 text-xs font-bold text-slate-800 cursor-pointer hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          >
-            {ANOS_RANGE.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-        </div>
-        <button onClick={nextMes} className="rounded p-0.5 text-slate-400 hover:bg-slate-50">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5"/></svg>
-        </button>
-      </div>
-
-      {/* Grid de dias */}
-      <div className="mb-1 grid grid-cols-7 gap-0.5">
-        {DIAS_SEMANA.map((d) => (
-          <div key={d} className="py-0.5 text-center text-[9px] font-semibold text-slate-400">{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-0.5">
-        {dias.map((dia, i) => {
-          if (dia === null) return <div key={`e${i}`} />;
-          const selecionado = dia === diaSel && mes === mesSel && ano === anoSel;
-          const ehHoje = dia === hoje.getDate() && mes === hoje.getMonth() && ano === hoje.getFullYear();
-          return (
-            <button
-              key={dia}
-              onClick={() => { onSelecionar(toISO(ano, mes, dia)); onFechar(); }}
-              className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] transition-colors ${
-                selecionado ? "bg-gradient-to-r from-blue-600 to-cyan-500 font-bold text-white"
-                : ehHoje ? "ring-2 ring-blue-500 text-blue-600"
-                : "text-slate-600 hover:bg-blue-50 hover:text-blue-600"
-              }`}
-            >
-              {dia}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Limpar + Hoje */}
-      <div className="mt-1.5 flex items-center justify-between border-t border-slate-100 pt-1.5">
-        <button onClick={() => { onSelecionar(""); onFechar(); }} className="text-[10px] text-slate-400 hover:text-red-500">Limpar</button>
-        <button
-          onClick={() => { onSelecionar(toISO(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())); onFechar(); }}
-          className="text-[10px] font-semibold text-blue-600 hover:text-blue-700"
-        >Hoje</button>
-      </div>
-    </div>
-  );
-}
-
-/** Input de data inline com calendário PT-BR + digitação manual — portal para evitar clipping */
-function InputDataConsulta({
-  valor,
-  pacienteId,
-  onSalvar,
-}: {
-  valor: string;
-  pacienteId: string;
-  onSalvar: (id: string, data: string) => void;
-}) {
-  const [aberto, setAberto] = useState(false);
-  const [texto, setTexto] = useState(toDisplay(valor));
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [isTouch, setIsTouch] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1279px)");
-    setIsTouch(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  function abrir(e: React.MouseEvent) {
-    e.stopPropagation();
-    if (wrapRef.current) {
-      const r = wrapRef.current.getBoundingClientRect();
-      const calHeight = 280;
-      const calWidth = 240;
-      let top: number, left: number;
-      // Vertical: abaixo se couber, senão acima
-      if (r.bottom + calHeight + 8 <= window.innerHeight) {
-        top = r.bottom + window.scrollY + 4;
-      } else {
-        top = r.top + window.scrollY - calHeight - 4;
-      }
-      // Horizontal: alinhado à esquerda, recua se estourar à direita
-      if (r.left + calWidth <= window.innerWidth || r.left < 0) {
-        left = r.left + window.scrollX;
-      } else {
-        left = window.innerWidth - calWidth - 8 + window.scrollX;
-      }
-      if (left < window.scrollX) left = window.scrollX + 4;
-      setPos({ top, left });
-    }
-    setAberto(!aberto);
-  }
-
-  function aplicarDigitacao() {
-    const m = texto.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-    if (!m) return;
-    let d = Number(m[1]);
-    let mo = Number(m[2]);
-    let y = Number(m[3]);
-    if (y < 100) y += 2000;
-    if (d < 1 || d > 31 || mo < 1 || mo > 12 || y < 1900 || y > 2100) return;
-    const iso = toISO(y, mo - 1, d);
-    onSalvar(pacienteId, iso);
-    setTexto(toDisplay(iso));
-    setAberto(false);
-  }
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!isTouch) {
-      setTexto(e.target.value);
-      return;
-    }
-    // Auto-format: só dígitos, insere "/" automaticamente
-    let raw = e.target.value.replace(/\D/g, "");
-    if (raw.length > 8) raw = raw.slice(0, 8);
-    const parts: string[] = [];
-    if (raw.length > 0) parts.push(raw.slice(0, 2));
-    if (raw.length > 2) parts.push(raw.slice(2, 4));
-    if (raw.length > 4) parts.push(raw.slice(4, 8));
-    const formatted = parts.join("/");
-    setTexto(formatted);
-    // Auto-submeter quando completar 8 dígitos
-    if (raw.length === 8) {
-      const d = Number(raw.slice(0, 2));
-      const mo = Number(raw.slice(2, 4));
-      const y = Number(raw.slice(4, 8));
-      if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 1900 && y <= 2100) {
-        const iso = toISO(y, mo - 1, d);
-        onSalvar(pacienteId, iso);
-        setTexto(toDisplay(iso));
-        setAberto(false);
-      }
-    }
-  }
-
-  // fecha ao clicar fora
-  useEffect(() => {
-    if (!aberto) return;
-    function fechar() { setAberto(false); }
-    document.addEventListener("click", fechar);
-    return () => document.removeEventListener("click", fechar);
-  }, [aberto]);
-
-  return (
-    <div ref={wrapRef} className="relative flex flex-col sm:flex-row items-center justify-center gap-1">
-      <button
-        onClick={abrir}
-        className="rounded p-0.5 text-slate-400 hover:bg-slate-50 hover:text-blue-600"
-      >
-        <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/>
-        </svg>
-      </button>
-      <input
-        type="text"
-        value={texto}
-        placeholder="dd/mm/aaaa"
-        maxLength={10}
-        inputMode={isTouch ? "numeric" : "text"}
-        className="w-[72px] sm:w-[90px] rounded border border-transparent bg-slate-50 px-0.5 sm:px-1 py-0.5 text-center text-[10px] sm:text-xs text-slate-700 outline-none transition-colors placeholder-slate-400 focus:border-blue-500/50 focus:bg-white"
-        onChange={handleChange}
-        onBlur={aplicarDigitacao}
-        onKeyDown={(e) => { if (e.key === "Enter") aplicarDigitacao(); }}
-      />
-      {aberto && createPortal(
-        <div style={{ position: "absolute", top: pos.top, left: pos.left, zIndex: 99999 }}>
-          <CalendarioPopup
-            valor={valor}
-            onSelecionar={(data) => { onSalvar(pacienteId, data); setTexto(toDisplay(data)); }}
-            onFechar={() => setAberto(false)}
-          />
-        </div>,
-        document.body
+    <div className="flex flex-col items-center gap-0.5 text-center">
+      <span className={`text-slate-500 font-semibold ${small ? "text-[7px]" : "text-[9px]"}`}>
+        {formatarData(item.dataBusca)}
+      </span>
+      <span className={`inline-flex flex-wrap items-center justify-center rounded-full font-bold uppercase tracking-wider text-center ${c.bg} ${c.text} ring-1 ${c.ring} ${small ? "px-2 py-0.5 text-[7px]" : "px-3 py-1 text-[10px]"}`} title={item.desfecho}>
+        {item.desfecho}
+      </span>
+      {item.dataAgendamento && (
+        <span className={`text-emerald-600 font-semibold ${small ? "text-[7px]" : "text-[9px]"}`}>
+          Agend: {formatarData(item.dataAgendamento)}
+        </span>
       )}
     </div>
   );
@@ -397,9 +182,21 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
   const [pacienteModal, setPacienteModal] = useState<Paciente | null>(null);
   const [pacienteAcompModal, setPacienteAcompModal] = useState<Paciente | null>(null);
   const [acompCounts, setAcompCounts] = useState<Record<string, number>>({});
+  const [lastDesfechoMap, setLastDesfechoMap] = useState<Record<string, { desfecho: string; dataBusca: string; dataAgendamento: string }>>({});
   const [pagina, setPagina] = useState(1);
+  const [sortField, setSortField] = useState<string>("paciente");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  useEffect(() => { setPagina(1); }, [favoritos, busca, filtroUnidade, filtroEquipe, filtroMicroarea]);
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  useEffect(() => { setPagina(1); }, [favoritos, busca, filtroUnidade, filtroEquipe, filtroMicroarea, sortField]);
 
   useEffect(() => {
     let cancelado = false;
@@ -450,15 +247,26 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
     return () => obs.disconnect();
   }, [carregando]);
 
-  // Carregar contagem de acompanhamentos
+  // Carregar contagem de acompanhamentos + último desfecho por paciente
   useEffect(() => {
     let cancel = false;
     buscarTodosAcompanhamentos()
       .then((items) => {
         if (cancel) return;
-        const map: Record<string, number> = {};
-        items.forEach((a) => { map[a.paciente_id] = (map[a.paciente_id] || 0) + 1; });
-        setAcompCounts(map);
+        const countMap: Record<string, number> = {};
+        const desfechoMap: Record<string, { desfecho: string; dataBusca: string; dataAgendamento: string }> = {};
+        items.forEach((a) => {
+          countMap[a.paciente_id] = (countMap[a.paciente_id] || 0) + 1;
+          if (!desfechoMap[a.paciente_id] && a.situacao_pos_busca) {
+            desfechoMap[a.paciente_id] = {
+              desfecho: a.situacao_pos_busca,
+              dataBusca: a.data_da_busca || "",
+              dataAgendamento: a.situacao_pos_busca === "AGENDAMENTO APÓS CONTATO DIRETO" ? (a.data_agendamento_apos_contato_direto || "") : "",
+            };
+          }
+        });
+        setAcompCounts(countMap);
+        setLastDesfechoMap(desfechoMap);
       })
       .catch(() => {});
     return () => { cancel = true; };
@@ -491,17 +299,6 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
           }
         } catch { /* fallback */ }
       }
-    }
-  }
-
-  async function salvarDataConsulta(id: string, data: string) {
-    try {
-      await atualizarPaciente(id, { data_ultima_cons_dentista: data });
-      setFavoritos((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, data_ultima_cons_dentista: data } : p))
-      );
-    } catch (e) {
-      console.error("Erro ao salvar data:", e);
     }
   }
 
@@ -538,9 +335,21 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
     return matchBusca && matchFiltro && matchUnidade && matchEquipe && matchMicroarea;
   });
 
+  const filtradosSorted = [...filtrados].sort((a, b) => {
+    let va = "", vb = "";
+    switch (sortField) {
+      case "paciente":    va = a.paciente || "";           vb = b.paciente || "";           break;
+      case "unidade":     va = a.unidade || "";            vb = b.unidade || "";            break;
+      case "status":      va = lastDesfechoMap[a.id]?.desfecho || ""; vb = lastDesfechoMap[b.id]?.desfecho || ""; break;
+      default:            va = a.paciente || "";           vb = b.paciente || "";           break;
+    }
+    const cmp = va.localeCompare(vb, "pt-BR", { sensitivity: "base" });
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
   const porPagina = 10;
-  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
-  const paginaAtual = filtrados.slice((pagina - 1) * porPagina, pagina * porPagina);
+  const totalPaginas = Math.max(1, Math.ceil(filtradosSorted.length / porPagina));
+  const paginaAtual = filtradosSorted.slice((pagina - 1) * porPagina, pagina * porPagina);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -737,31 +546,43 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Ação</span>
                         </div>
                       </th>
-                      <th className="px-6 py-1 text-center align-middle h-[76px]">
+                      <th className="cursor-pointer select-none px-6 py-1 text-center align-middle h-[76px]" onClick={() => handleSort("status")}>
                         <div className="flex flex-col items-center gap-1.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-cyan-300 ring-1 ring-white/10">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
                           </div>
-                          <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Últ. Consulta</span>
-
+                          <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Último Status</span>
+                          {sortField === "status" && (
+                            <svg className={`h-2.5 w-2.5 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
-                      <th className="px-6 py-1 text-center align-middle h-[76px]">
+                      <th className="cursor-pointer select-none px-6 py-1 text-center align-middle h-[76px]" onClick={() => handleSort("paciente")}>
                         <div className="flex flex-col items-center gap-1.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-cyan-300 ring-1 ring-white/10">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
                           </div>
                           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Paciente</span>
-
+                          {sortField === "paciente" && (
+                            <svg className={`h-2.5 w-2.5 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
-                      <th className="px-6 py-1 text-center align-middle h-[76px]">
+                      <th className="cursor-pointer select-none px-6 py-1 text-center align-middle h-[76px]" onClick={() => handleSort("unidade")}>
                         <div className="flex flex-col items-center gap-1.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-cyan-300 ring-1 ring-white/10">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>
                           </div>
                           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Unidade</span>
-
+                          {sortField === "unidade" && (
+                            <svg className={`h-2.5 w-2.5 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
                     </tr>
@@ -771,35 +592,35 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                       const idadeNum = calcularIdade(p.data_de_nascimento);
                       return (
                       <tr key={p.id} className="group transition-colors hover:bg-slate-50/50">
-                        <td className="px-2 py-2 text-center align-top">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-1 rounded-md bg-slate-50/80 px-1.5 py-0.5 ring-1 ring-slate-100">
+                        <td className="px-3 py-3 text-center align-top">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-slate-50 to-white px-3 py-1.5 ring-1 ring-slate-200/70 shadow-sm">
                               <button
                                 onClick={() => unfavoritar(p.id)}
-                                className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-50 ring-1 ring-amber-200/50 transition-all duration-200 hover:scale-110 hover:bg-amber-100"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg ring-1 transition-all duration-200 hover:scale-110 hover:shadow-md bg-amber-50 ring-amber-200/50 hover:bg-amber-100"
                                 title="Remover dos favoritos"
                               >
-                                <svg className="h-3 w-3 text-amber-400" fill="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
+                                <svg className="h-3.5 w-3.5 text-amber-400 group-hover/btn:rotate-[-5deg]" fill="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
                               </button>
                               {acompCounts[p.id] > 0 && (
-                                <AcompCountBadge count={acompCounts[p.id]} pacienteId={p.id} onNavigate={onNavigateAcompFiltered} className="inline-flex h-4 min-w-[16px] cursor-pointer select-none items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 px-1 text-[8px] font-black text-white shadow-sm shadow-red-500/25 ring-1 ring-red-400/30 transition-transform hover:scale-110 active:scale-90" />
+                                <AcompCountBadge count={acompCounts[p.id]} pacienteId={p.id} onNavigate={onNavigateAcompFiltered} className="flex h-5 min-w-[20px] cursor-pointer select-none items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 px-1 text-[9px] font-black text-white shadow-md shadow-red-500/25 ring-1 ring-red-400/30 transition-transform hover:scale-110 active:scale-90" />
                               )}
                             </div>
-                            <div className="h-px w-8 bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" />
-                            <div className="flex w-full flex-col gap-0.5">
-                              <button onClick={() => setPacienteAcompModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/40 transition-all duration-200 hover:from-cyan-400 hover:to-cyan-500 hover:shadow-md hover:shadow-cyan-300/40 hover:-translate-y-0.5 active:translate-y-0">
-                                <svg className="h-3 w-3 flex-shrink-0 transition-transform duration-200 group-hover/btn:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
-                                <span>Acomp.</span>
+                            <div className="w-10 bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" style={{ height: '1px' }} />
+                            <div className="flex w-full flex-col gap-1.5">
+                              <button onClick={() => setPacienteAcompModal(p)} className="group/btn flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/40 transition-all duration-200 hover:from-cyan-400 hover:to-cyan-500 hover:shadow-md hover:shadow-cyan-300/40 hover:scale-[1.02] active:scale-[0.98]">
+                                <svg className="h-3.5 w-3.5 flex-shrink-0 group-hover/btn:rotate-[-5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
+                                <span className="relative z-10">Acomp.</span>
                               </button>
-                              <button onClick={() => setPacienteModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded-lg border border-slate-200/80 bg-white px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 shadow-sm transition-all duration-200 hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-cyan-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
-                                <svg className="h-3 w-3 flex-shrink-0 transition-transform duration-200 group-hover/btn:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
-                                Detalhes
+                              <button onClick={() => setPacienteModal(p)} className="group/btn flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-sm transition-all duration-200 hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-cyan-700 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
+                                <svg className="h-3.5 w-3.5 flex-shrink-0 group-hover/btn:rotate-[-5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                                <span className="relative z-10">Detalhes</span>
                               </button>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-5 text-center align-top">
-                          <InputDataConsulta valor={p.data_ultima_cons_dentista} pacienteId={p.id} onSalvar={salvarDataConsulta} />
+                        <td className="px-6 py-5 text-center align-top break-words">
+                          <StatusBadge item={lastDesfechoMap[p.id]} />
                         </td>
                         <td className="px-5 py-4 text-center align-top">
                           <div className="flex flex-col items-center gap-0.5">
@@ -858,31 +679,43 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Ação</span>
                         </div>
                       </th>
-                      <th className="px-6 py-1 text-center align-middle h-[76px]">
+                      <th className="cursor-pointer select-none px-6 py-1 text-center align-middle h-[76px]" onClick={() => handleSort("status")}>
                         <div className="flex flex-col items-center gap-1.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-cyan-300 ring-1 ring-white/10">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
                           </div>
-                          <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Últ. Consulta</span>
-
+                          <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Último Status</span>
+                          {sortField === "status" && (
+                            <svg className={`h-2.5 w-2.5 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
-                      <th className="px-6 py-1 text-center align-middle h-[76px]">
+                      <th className="cursor-pointer select-none px-6 py-1 text-center align-middle h-[76px]" onClick={() => handleSort("paciente")}>
                         <div className="flex flex-col items-center gap-1.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-cyan-300 ring-1 ring-white/10">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
                           </div>
                           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Paciente</span>
-
+                          {sortField === "paciente" && (
+                            <svg className={`h-2.5 w-2.5 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
-                      <th className="px-6 py-5 text-center">
+                      <th className="cursor-pointer select-none px-6 py-5 text-center" onClick={() => handleSort("unidade")}>
                         <div className="flex flex-col items-center gap-1.5">
                           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-cyan-300 ring-1 ring-white/10">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>
                           </div>
                           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">Unidade</span>
-
+                          {sortField === "unidade" && (
+                            <svg className={`h-2.5 w-2.5 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
                     </tr>
@@ -892,35 +725,35 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                       const idadeNum = calcularIdade(p.data_de_nascimento);
                       return (
                       <tr key={p.id} className="group transition-colors hover:bg-slate-50/50">
-                        <td className="px-2 py-2 text-center align-top">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-1 rounded-md bg-slate-50/80 px-1.5 py-0.5 ring-1 ring-slate-100">
+                        <td className="px-3 py-3 text-center align-top">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-1.5 rounded-xl bg-gradient-to-br from-slate-50 to-white px-3 py-1.5 ring-1 ring-slate-200/70 shadow-sm">
                               <button
                                 onClick={() => unfavoritar(p.id)}
-                                className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-50 ring-1 ring-amber-200/50 transition-all duration-200 hover:scale-110 hover:bg-amber-100"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg ring-1 transition-all duration-200 hover:scale-110 hover:shadow-md bg-amber-50 ring-amber-200/50 hover:bg-amber-100"
                                 title="Remover dos favoritos"
                               >
-                                <svg className="h-3 w-3 text-amber-400" fill="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
+                                <svg className="h-3.5 w-3.5 text-amber-400 group-hover/btn:rotate-[-5deg]" fill="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
                               </button>
                               {acompCounts[p.id] > 0 && (
-                                <AcompCountBadge count={acompCounts[p.id]} pacienteId={p.id} onNavigate={onNavigateAcompFiltered} className="inline-flex h-4 min-w-[16px] cursor-pointer select-none items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 px-1 text-[8px] font-black text-white shadow-sm shadow-red-500/25 ring-1 ring-red-400/30 transition-transform hover:scale-110 active:scale-90" />
+                                <AcompCountBadge count={acompCounts[p.id]} pacienteId={p.id} onNavigate={onNavigateAcompFiltered} className="flex h-5 min-w-[20px] cursor-pointer select-none items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 px-1 text-[9px] font-black text-white shadow-md shadow-red-500/25 ring-1 ring-red-400/30 transition-transform hover:scale-110 active:scale-90" />
                               )}
                             </div>
-                            <div className="h-px w-8 bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" />
-                            <div className="flex w-full flex-col gap-0.5">
-                              <button onClick={() => setPacienteAcompModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/40 transition-all duration-200 hover:from-cyan-400 hover:to-cyan-500 hover:shadow-md hover:shadow-cyan-300/40 hover:-translate-y-0.5 active:translate-y-0">
-                                <svg className="h-3 w-3 flex-shrink-0 transition-transform duration-200 group-hover/btn:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
-                                <span>Acomp.</span>
+                            <div className="w-10 bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" style={{ height: '1px' }} />
+                            <div className="flex w-full flex-col gap-1.5">
+                              <button onClick={() => setPacienteAcompModal(p)} className="group/btn flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/40 transition-all duration-200 hover:from-cyan-400 hover:to-cyan-500 hover:shadow-md hover:shadow-cyan-300/40 hover:scale-[1.02] active:scale-[0.98]">
+                                <svg className="h-3.5 w-3.5 flex-shrink-0 group-hover/btn:rotate-[-5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
+                                <span className="relative z-10">Acomp.</span>
                               </button>
-                              <button onClick={() => setPacienteModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded-lg border border-slate-200/80 bg-white px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 shadow-sm transition-all duration-200 hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-cyan-700 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
-                                <svg className="h-3 w-3 flex-shrink-0 transition-transform duration-200 group-hover/btn:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
-                                Detalhes
+                              <button onClick={() => setPacienteModal(p)} className="group/btn flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 shadow-sm transition-all duration-200 hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-cyan-700 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
+                                <svg className="h-3.5 w-3.5 flex-shrink-0 group-hover/btn:rotate-[-5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                                <span className="relative z-10">Detalhes</span>
                               </button>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-5 text-center align-top">
-                          <InputDataConsulta valor={p.data_ultima_cons_dentista} pacienteId={p.id} onSalvar={salvarDataConsulta} />
+                        <td className="px-6 py-5 text-center align-top break-words">
+                          <StatusBadge item={lastDesfechoMap[p.id]} />
                         </td>
                         <td className="px-5 py-4 text-center align-top">
                           <div className="flex flex-col items-center gap-0.5">
@@ -977,22 +810,37 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                           <span className="text-[8px] font-black uppercase tracking-wider text-white/90">Ação</span>
                         </div>
                       </th>
-                      <th className="px-2 py-2.5 text-center" style={{ width: '18%' }}>
+                      <th className="cursor-pointer select-none px-2 py-2.5 text-center" style={{ width: '18%' }} onClick={() => handleSort("status")}>
                         <div className="flex flex-col items-center gap-0.5">
                           <svg className="h-3 w-3 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
-                          <span className="text-[8px] font-black uppercase tracking-wider text-white/90">Últ. Consulta</span>
+                          <span className="text-[8px] font-black uppercase tracking-wider text-white/90">Último Status</span>
+                          {sortField === "status" && (
+                            <svg className={`h-2 w-2 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
-                      <th className="px-2 py-2.5 text-center" style={{ width: '42%' }}>
+                      <th className="cursor-pointer select-none px-2 py-2.5 text-center" style={{ width: '42%' }} onClick={() => handleSort("paciente")}>
                         <div className="flex flex-col items-center gap-0.5">
                           <svg className="h-3 w-3 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>
                           <span className="text-[8px] font-black uppercase tracking-wider text-white/90">Paciente</span>
+                          {sortField === "paciente" && (
+                            <svg className={`h-2 w-2 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
-                      <th className="px-2 py-2.5 text-center" style={{ width: '25%' }}>
+                      <th className="cursor-pointer select-none px-2 py-2.5 text-center" style={{ width: '25%' }} onClick={() => handleSort("unidade")}>
                         <div className="flex flex-col items-center gap-0.5">
                           <svg className="h-3 w-3 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/></svg>
                           <span className="text-[8px] font-black uppercase tracking-wider text-white/90">Unidade</span>
+                          {sortField === "unidade" && (
+                            <svg className={`h-2 w-2 transition-all duration-300 ${sortDir === "desc" ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                            </svg>
+                          )}
                         </div>
                       </th>
                     </tr>
@@ -1003,39 +851,39 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                       return (
                       <tr key={p.id} className="transition-colors hover:bg-slate-50/50">
                         {/* Col 1: Ação */}
-                        <td className="px-1 py-2 text-center align-middle" style={{ width: '15%' }}>
-                          <div className="flex flex-col items-center gap-px">
-                            <div className="flex items-center gap-px rounded-md bg-slate-50/80 px-1 py-px ring-1 ring-slate-100">
+                        <td className="px-2 py-2 text-center align-middle" style={{ width: '15%' }}>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center gap-1 rounded-lg bg-gradient-to-br from-slate-50 to-white px-2 py-1 ring-1 ring-slate-200/70 shadow-sm">
                               <button
                                 onClick={() => unfavoritar(p.id)}
-                                className="flex h-4 w-4 items-center justify-center rounded bg-amber-50 ring-1 ring-amber-200/50 transition-all duration-200 hover:scale-110"
+                                className="flex h-5 w-5 items-center justify-center rounded-md ring-1 transition-all duration-200 hover:scale-110 hover:shadow-md bg-amber-50 ring-amber-200/50 hover:bg-amber-100"
                                 title="Remover dos favoritos"
                               >
-                                <svg className="h-2.5 w-2.5 text-amber-400" fill="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
+                                <svg className="h-3 w-3 text-amber-400 group-hover/btn:rotate-[-5deg]" fill="currentColor" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>
                               </button>
                               {acompCounts[p.id] > 0 && (
-                                <AcompCountBadge count={acompCounts[p.id]} pacienteId={p.id} onNavigate={onNavigateAcompFiltered} className="inline-flex h-3.5 min-w-[14px] cursor-pointer select-none items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 px-1 text-[7px] font-black text-white shadow-sm shadow-red-500/25 ring-1 ring-red-400/30 transition-transform hover:scale-110 active:scale-90" />
+                                <AcompCountBadge count={acompCounts[p.id]} pacienteId={p.id} onNavigate={onNavigateAcompFiltered} className="flex h-4 min-w-[16px] cursor-pointer select-none items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-rose-600 px-1 text-[8px] font-black text-white shadow-md shadow-red-500/25 ring-1 ring-red-400/30 transition-transform hover:scale-110 active:scale-90" />
                               )}
                             </div>
-                            <div className="h-px w-6 bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" />
-                            <div className="flex w-full flex-col gap-px">
-                              <button onClick={() => setPacienteAcompModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded bg-gradient-to-r from-cyan-500 to-cyan-600 px-1 py-1 text-[7px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/50 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0">
-                                <svg className="h-2.5 w-2.5 flex-shrink-0 transition-transform duration-200 group-hover/btn:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
-                                <span>Acomp.</span>
+                            <div className="w-8 bg-gradient-to-r from-transparent via-slate-200/80 to-transparent" style={{ height: '1px' }} />
+                            <div className="flex w-full flex-col gap-1">
+                              <button onClick={() => setPacienteAcompModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 px-2 py-1.5 text-[8px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/50 transition-all duration-200 hover:from-cyan-400 hover:to-cyan-500 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
+                                <svg className="h-3 w-3 flex-shrink-0 group-hover/btn:rotate-[-5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/></svg>
+                                <span className="relative z-10">Acomp.</span>
                               </button>
-                              <button onClick={() => setPacienteModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded border border-slate-200/80 bg-white px-1 py-1 text-[7px] font-bold uppercase tracking-wider text-slate-500 shadow-sm transition-all duration-200 hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-cyan-700 hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0">
-                                <svg className="h-2.5 w-2.5 flex-shrink-0 transition-transform duration-200 group-hover/btn:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
-                                Det.
+                              <button onClick={() => setPacienteModal(p)} className="group/btn flex w-full items-center justify-center gap-1 rounded-lg border border-slate-200/80 bg-white px-2 py-1.5 text-[8px] font-bold uppercase tracking-wider text-slate-500 shadow-sm transition-all duration-200 hover:border-cyan-200 hover:bg-cyan-50/50 hover:text-cyan-700 hover:shadow-md hover:scale-[1.02] active:scale-[0.98]">
+                                <svg className="h-3 w-3 flex-shrink-0 group-hover/btn:rotate-[-5deg]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                                <span className="relative z-10">Det.</span>
                               </button>
                             </div>
                           </div>
                         </td>
-                        {/* Col 2: Últ. Consulta */}
-                        <td className="px-1 py-2.5 text-center align-middle" style={{ width: '18%' }}>
-                          <InputDataConsulta valor={p.data_ultima_cons_dentista} pacienteId={p.id} onSalvar={salvarDataConsulta} />
+                        {/* Col 2: Status */}
+                        <td className="px-1 py-2.5 text-center align-top break-words" style={{ width: '18%' }}>
+                          <StatusBadge item={lastDesfechoMap[p.id]} small />
                         </td>
                         {/* Col 3: Paciente */}
-                        <td className="px-2 py-2.5 text-center align-middle" style={{ width: '42%' }}>
+                        <td className="px-2 py-2.5 text-center align-top" style={{ width: '42%' }}>
                           <div className="flex flex-col items-center gap-0.5">
                             <span className="text-[11px] font-black text-slate-800 group-hover:text-slate-900 transition-colors duration-200 leading-tight break-words">{p.paciente || "\u2014"}</span>
                             <span className="font-mono text-[8px] font-bold text-slate-400/80 leading-tight truncate max-w-[130px]" title={p.n_cns_da_pessoa_cadastrada}>CNS {p.n_cns_da_pessoa_cadastrada || "\u2014"}</span>
@@ -1060,7 +908,7 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                           </div>
                         </td>
                         {/* Col 4: Unidade */}
-                        <td className="px-2 py-2.5 text-center align-middle" style={{ width: '25%' }}>
+                        <td className="px-2 py-2.5 text-center align-top" style={{ width: '25%' }}>
                           <div className="flex flex-col items-center gap-0.5">
                             <span className="text-[10px] font-black text-slate-800 group-hover:text-slate-900 transition-colors duration-200 leading-tight">{p.unidade || "\u2014"}</span>
                             <span className="text-[8px] font-bold text-slate-400/80 leading-tight">{p.equipe || "\u2014"}</span>
@@ -1113,85 +961,13 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
 
       {/* Modal de detalhes do paciente */}
       {pacienteModal && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" onClick={() => setPacienteModal(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300/60">Detalhes do Paciente</p>
-                <h2 className="truncate text-lg font-black text-white">{pacienteModal.paciente}</h2>
-              </div>
-              <button onClick={() => setPacienteModal(null)} className="ml-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/10 text-white/70 transition-colors hover:bg-white/20 hover:text-white">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
-
-            {/* Conteúdo */}
-            <div className="space-y-5 p-6">
-              {/* Identificação */}
-              <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Identificação</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  <InfoRow label="Nome" value={pacienteModal.paciente} />
-                  <InfoRow label="CNS" value={pacienteModal.n_cns_da_pessoa_cadastrada} />
-                  <InfoRow label="Prontuário" value={pacienteModal.n_pront} />
-                </div>
-              </div>
-
-              {/* Dados demográficos */}
-              <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Dados Demográficos</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  <InfoRow label="Nascimento" value={formatarData(pacienteModal.data_de_nascimento)} />
-                  <InfoRow label="Unidade" value={pacienteModal.unidade} />
-                  <InfoRow label="Equipe" value={pacienteModal.equipe} />
-                  <InfoRow label="Microárea" value={pacienteModal.microarea} />
-                </div>
-              </div>
-
-              {/* Indicadores de saúde */}
-              <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Indicadores de Saúde</p>
-                {(() => {
-                  const itens: [boolean, string][] = [
-                    [pacienteModal.gestante, "Gestante"],
-                    [pacienteModal.tabagista, "Tabagista"],
-                    [pacienteModal.has, "HAS"],
-                    [pacienteModal.dm, "DM"],
-                    [pacienteModal.hiv, "HIV"],
-                    [pacienteModal.tb, "TB"],
-                    [pacienteModal.familia_recebe_bf, "Bolsa Família"],
-                  ];
-                  const idade = calcularIdade(pacienteModal.data_de_nascimento);
-                  if (idade !== null && idade <= 2) itens.push([true, "Criança ≤ 2 anos"]);
-                  const ativos = itens.filter(([a]) => a);
-                  return ativos.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {ativos.map(([, label]) => (
-                        <span key={label} className="inline-flex items-center rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm shadow-cyan-200/50">
-                          {label}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm font-semibold text-slate-400">Não há indicadores de saúde</p>
-                  );
-                })()}
-              </div>
-
-              {/* Última consulta */}
-              <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Última Consulta</p>
-                <p className="text-sm font-semibold text-slate-700">
-                  {pacienteModal.data_ultima_cons_dentista
-                    ? formatarData(pacienteModal.data_ultima_cons_dentista)
-                    : "\u2014"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>,
+        <ModalDetalhes
+          paciente={pacienteModal}
+          usuarioId={usuarioId}
+          onFechar={() => setPacienteModal(null)}
+          onAtualizar={(p) => setFavoritos((prev) => prev.map((x) => x.id === p.id ? p : x))}
+          onAbrirAcomp={(p) => { setPacienteModal(null); setPacienteAcompModal(p); }}
+        />,
         document.body
       )}
 
@@ -1208,14 +984,6 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
   );
 }
 
-/* ── Subcomponentes do modal ──────────────────────────────────────────── */
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="truncate text-sm font-semibold text-slate-700">{value || "\u2014"}</p>
-    </div>
-  );
-}
+
 
 

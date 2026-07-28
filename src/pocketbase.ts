@@ -29,14 +29,6 @@ function acompanhamentosBaseUrl(): string {
   return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_ACOMPANHAMENTOS_COLLECTION}/records`;
 }
 
-export interface FavoritoRecord {
-  id: string;
-  usuario_id: string;
-  paciente_id: string;
-  created?: string;
-  updated?: string;
-}
-
 /**
  * Obtem token de autenticacao.
  * Prioridade: localStorage > env var > vazio (anonimo).
@@ -88,17 +80,6 @@ export async function buscarPacientes(opts?: {
     totalItems: data.totalItems as number,
     totalPages: data.totalPages as number,
   };
-}
-
-export async function buscarPacientePorId(id: string): Promise<Paciente> {
-  const url = `${baseUrl()}/${id}`;
-  const res = await fetch(url, { headers: buildHeaders() });
-
-  if (!res.ok) {
-    throw new Error(`PocketBase erro ${res.status}: ${res.statusText}`);
-  }
-
-  return (await res.json()) as Paciente;
 }
 
 // ── Favoritos (painelsorriso53_favoritos) ──────────────────────────────

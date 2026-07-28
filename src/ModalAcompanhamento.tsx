@@ -416,6 +416,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
   const [tipoContato, setTipoContato] = useState("");
   const [entraveInformadoPor, setEntraveInformadoPor] = useState("");
   const [situacaoPosBusca, setSituacaoPosBusca] = useState("");
+  const [dataAgendamento, setDataAgendamento] = useState("");
   const [entravesIdentificados, setEntravesIdentificados] = useState<string[]>([]);
   const [observacoes, setObservacoes] = useState("");
 
@@ -451,6 +452,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
     setTipoContato(acompanhamentoEdit.tipo_contato);
     setEntraveInformadoPor(acompanhamentoEdit.entrave_informado_por || "");
     setSituacaoPosBusca(acompanhamentoEdit.situacao_pos_busca);
+    setDataAgendamento(acompanhamentoEdit.data_agendamento_apos_contato_direto || "");
     setEntravesIdentificados(
       acompanhamentoEdit.entraves_identificados
         ? acompanhamentoEdit.entraves_identificados.split(";").map((e) => e.trim()).filter(Boolean)
@@ -478,6 +480,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
           situacao_pos_busca: situacaoPosBusca,
           entraves_identificados: entravesIdentificados.join("; "),
           observacoes,
+          data_agendamento_apos_contato_direto: situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" ? dataAgendamento : "",
         });
         setToast("Registro atualizado com sucesso!");
         onEditSalvo?.();
@@ -493,6 +496,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
           situacao_pos_busca: situacaoPosBusca,
           entraves_identificados: entravesIdentificados.join("; "),
           observacoes,
+          data_agendamento_apos_contato_direto: situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" ? dataAgendamento : "",
         });
         setAcompanhamentos((prev) => [novo, ...prev]);
         setToast("Registro salvo com sucesso!");
@@ -514,6 +518,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
     setSituacaoPosBusca("");
     setEntravesIdentificados([]);
     setObservacoes("");
+    setDataAgendamento("");
   }
 
   async function handleExcluir(id: string) {
@@ -528,27 +533,28 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
   }
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-start justify-center overflow-y-auto p-2 sm:p-4" onClick={onFechar}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" onClick={onFechar}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-md" />
 
-      <div className="relative mt-4 sm:mt-8 mb-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
+      <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-black/5" onClick={(e) => e.stopPropagation()}>
 
         {/* ═══ Header ══════════════════════════════════════════════════ */}
-        <div className="sticky top-0 z-10 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 px-5 py-4 sm:px-6">
+        <div className="flex items-center gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 px-5 py-5 sm:px-6">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 text-white/80 backdrop-blur-sm">
-                {Icone.prontuario}
+            <div className="flex items-center gap-3">
+              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 text-xl font-black text-white shadow-lg shadow-cyan-500/30 ring-2 ring-white/20">
+                {paciente.paciente?.charAt(0)?.toUpperCase() || "?"}
               </div>
               <div className="min-w-0">
-                <h2 className="truncate text-base sm:text-lg font-black text-white tracking-tight">{acompanhamentoEdit ? "Editar Acompanhamento" : "Registro de Acompanhamento"}</h2>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300/60 truncate">
-                  Paciente: {paciente.paciente}
-                </p>
+                <div className="flex items-center gap-2 text-xs font-semibold text-cyan-200/70 mb-0.5">
+                  {Icone.prontuario}
+                  NOVO ACOMPANHAMENTO
+                </div>
+                <h2 className="truncate text-lg font-black text-white leading-tight">{paciente.paciente?.toUpperCase() || "PACIENTE"}</h2>
               </div>
             </div>
           </div>
-          <button onClick={onFechar} className="ml-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/10 text-white/70 transition-all duration-200 hover:bg-white/20 hover:text-white hover:scale-105">
+          <button onClick={onFechar} className="ml-4 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/15 hover:text-white">
             {Icone.x}
           </button>
         </div>
@@ -570,7 +576,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
         )}
 
         {/* ═══ Corpo ═════════════════════════════════════════════════ */}
-        <div className="p-5 sm:p-6">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
           {carregando ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-slate-100 border-t-cyan-500" />
@@ -579,28 +585,42 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
           ) : modoForm ? (
             /* ═══ FORMULÁRIO ════════════════════════════════════════ */
             <div className="space-y-5">
-              {/* Linha 1: Data + Tipo Busca */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                    {Icone.calendario}
-                    Data da Busca
-                  </label>
-                  <InputData valor={dataBusca} onChange={setDataBusca} />
+              {/* Seção 1: Identificação — Quando e Como */}
+              <div className="rounded-xl border-l-4 border-cyan-500 bg-gradient-to-r from-cyan-50/80 to-white p-3.5">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-cyan-500/10">
+                    {Icone.busca}
+                  </div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-cyan-700">Identificação da Busca</p>
                 </div>
-                <SelectField
-                  label="Tipo de Busca"
-                  valor={tipoBusca}
-                  onChange={setTipoBusca}
-                  opcoes={TIPOS_BUSCA}
-                  placeholder="Selecione"
-                  obrigatorio
-                  icone={Icone.busca}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2.5">
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                      {Icone.calendario}
+                      Data da Busca
+                    </label>
+                    <InputData valor={dataBusca} onChange={setDataBusca} />
+                  </div>
+                  <SelectField
+                    label="Tipo de Busca"
+                    valor={tipoBusca}
+                    onChange={setTipoBusca}
+                    opcoes={TIPOS_BUSCA}
+                    placeholder="Selecione"
+                    obrigatorio
+                    icone={Icone.busca}
+                  />
+                </div>
               </div>
 
-              {/* Linha 2: Tipo Contato + Entrave Por */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Seção 2: Contato — Como foi o contato */}
+              <div className="rounded-xl border-l-4 border-violet-500 bg-gradient-to-r from-violet-50/80 to-white p-3.5">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-violet-500/10">
+                    {Icone.telefone}
+                  </div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-violet-700">Contato</p>
+                </div>
                 <SelectField
                   label="Tipo de Contato"
                   valor={tipoContato}
@@ -610,41 +630,84 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
                   obrigatorio
                   icone={Icone.telefone}
                 />
-                <SelectField
-                  label="Entrave(s) Informado Por"
-                  valor={entraveInformadoPor}
-                  onChange={setEntraveInformadoPor}
-                  opcoes={ENTRAVES_INFORMADO_POR}
-                  placeholder="Selecione"
-                  icone={Icone.info}
-                />
               </div>
 
-              {/* Linha 3: Situação Pós Busca */}
-              <SelectField
-                label="Situação Pós Busca Ativa"
-                valor={situacaoPosBusca}
-                onChange={setSituacaoPosBusca}
-                opcoes={SITUAÇÕES_POS_BUSCA}
-                placeholder="Selecione o desfecho da busca"
-                obrigatorio
-                icone={Icone.relogio}
-              />
+              {/* Seção 3: Resultado — O que aconteceu */}
+              <div className="rounded-xl border-l-4 border-emerald-500 bg-gradient-to-r from-emerald-50/80 to-white p-3.5">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10">
+                    {Icone.relogio}
+                  </div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-emerald-700">Resultado</p>
+                </div>
+                <SelectField
+                  label="Situação Pós Busca Ativa"
+                  valor={situacaoPosBusca}
+                  onChange={setSituacaoPosBusca}
+                  opcoes={SITUAÇÕES_POS_BUSCA}
+                  placeholder="Selecione o desfecho da busca"
+                  obrigatorio
+                  icone={Icone.relogio}
+                />
+                {situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" && (
+                  <div className="mt-3">
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
+                      Data do Agendamento
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50/80 px-3 py-2.5 transition-all duration-200 focus-within:border-emerald-400/60 focus-within:bg-white focus-within:ring-2 focus-within:ring-emerald-400/15">
+                        <span className="flex-shrink-0 text-emerald-400">
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
+                        </span>
+                        <input
+                          type="date"
+                          value={dataAgendamento}
+                          onChange={(e) => setDataAgendamento(e.target.value)}
+                          className="w-full bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder-slate-400/70"
+                          placeholder="dd/mm/aaaa"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-              {/* Linha 4: Entraves */}
-              <MultiSelect
-                label="Entraves Identificados"
-                valores={entravesIdentificados}
-                onChange={setEntravesIdentificados}
-                opcoes={ENTRAVES_OPTIONS}
-              />
+              {/* Seção 4: Motivos — Por que houve entrave */}
+              <div className="rounded-xl border-l-4 border-amber-500 bg-gradient-to-r from-amber-50/80 to-white p-3.5">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/10">
+                    <svg className="h-3.5 w-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+                  </div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-amber-700">Motivos e Obstáculos</p>
+                </div>
+                <div className="space-y-3">
+                  <SelectField
+                    label="Entrave(s) Informado Por"
+                    valor={entraveInformadoPor}
+                    onChange={setEntraveInformadoPor}
+                    opcoes={ENTRAVES_INFORMADO_POR}
+                    placeholder="Selecione"
+                    icone={Icone.info}
+                  />
+                  <MultiSelect
+                    label="Entraves Identificados"
+                    valores={entravesIdentificados}
+                    onChange={setEntravesIdentificados}
+                    opcoes={ENTRAVES_OPTIONS}
+                  />
+                </div>
+              </div>
 
-              {/* Linha 5: Observações */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  {Icone.chat}
-                  Observações Detalhadas
-                </label>
+              {/* Seção 5: Observações — Detalhes adicionais */}
+              <div className="rounded-xl border-l-4 border-blue-500 bg-gradient-to-r from-blue-50/80 to-white p-3.5">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-500/10">
+                    {Icone.chat}
+                  </div>
+                  <p className="text-[11px] font-extrabold uppercase tracking-widest text-blue-700">Observações</p>
+                </div>
                 <textarea
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
@@ -655,12 +718,12 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
               </div>
 
               {/* Botões */}
-              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
-                <button onClick={() => { limparForm(); onFechar(); }} className="text-sm font-bold text-slate-500 transition-colors hover:text-slate-700 px-5 py-2.5">
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button onClick={() => { limparForm(); onFechar(); }} className="text-xs font-bold text-slate-400 transition-colors hover:text-slate-600 px-5 py-2.5">
                   Descartar
                 </button>
                 <button onClick={handleSalvar} disabled={salvando}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-slate-300/50 transition-all duration-200 hover:from-slate-800 hover:to-cyan-800 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-500/20 transition-all hover:from-emerald-400 hover:to-emerald-500 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                   {salvando ? (
                     <><div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> {acompanhamentoEdit ? "Atualizando..." : "Salvando..."}</>
                   ) : (

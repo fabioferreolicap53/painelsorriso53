@@ -128,15 +128,6 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
             </svg>
           </button>
 
-          {/* User avatar + nome */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/10 py-1 sm:py-1.5 pl-1 sm:pl-1.5 pr-1.5 sm:pr-3 ring-1 ring-white/10 transition-all hover:bg-white/20 min-w-0">
-            <div className="flex h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0 items-center justify-center rounded-lg bg-cyan-400 text-[10px] sm:text-xs font-bold text-slate-900 shadow-lg">{userInitials}</div>
-            <div className="hidden lg:block min-w-0">
-              <p className="text-[11px] sm:text-xs font-semibold text-white/90 truncate max-w-[100px]">{user.name || user.email}</p>
-              <p className="text-[9px] sm:text-[10px] text-white/50 font-medium">{user.role === "admin" ? "Administrador" : "Usuário"}</p>
-            </div>
-          </div>
-
           {/* Logout */}
           <button
             onClick={onLogout}
