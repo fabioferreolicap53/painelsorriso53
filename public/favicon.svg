@@ -8,8 +8,9 @@
   <!-- fundo arredondado -->
   <rect width="32" height="32" rx="7" fill="url(#g)"/>
   <!-- olhos -->
-  <circle cx="11" cy="13" r="1.8" fill="#0f172a"/>
-  <circle cx="21" cy="13" r="1.8" fill="#0f172a"/>
-  <!-- sorriso -->
-  <path d="M8 18.5 Q16 27 24 18.5" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="11" cy="13" r="2.2" fill="#0f172a"/>
+  <circle cx="21" cy="13" r="2.2" fill="#0f172a"/>
+  <!-- sorriso boca aberta (mood) -->
+  <path d="M6 18 Q16 29 26 18" stroke="#0f172a" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M8 18 Q16 26 24 18" fill="#0f172a"/>
 </svg>

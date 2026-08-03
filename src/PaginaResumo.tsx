@@ -121,11 +121,21 @@ export default function PaginaResumo() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [acomps, setAcomps] = useState<Acompanhamento[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [filtroUnidade, setFiltroUnidade] = useState("todas");
+  const [filtroEquipe, setFiltroEquipe] = useState("todas");
+  const [filtroMicroarea, setFiltroMicroarea] = useState("todas");
   const [filtroStatus, setFiltroStatus] = useState<string>("todas");
+  const [filtroUnidadeDraft, setFiltroUnidadeDraft] = useState("todas");
+  const [filtroEquipeDraft, setFiltroEquipeDraft] = useState("todas");
+  const [filtroMicroareaDraft, setFiltroMicroareaDraft] = useState("todas");
   const [filtroStatusDraft, setFiltroStatusDraft] = useState<string>("todas");
   const [mostrarAvancada, setMostrarAvancada] = useState(false);
 
-  const filtrosAtivos = filtroStatus !== "todas" ? 1 : 0;
+  const filtrosAtivos = [filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus].filter(v => v !== "todas").length;
+
+  const unidades = Array.from(new Set(pacientes.map(p => p.unidade).filter(Boolean))).sort();
+  const equipes = Array.from(new Set(pacientes.map(p => p.equipe).filter(Boolean))).sort();
+  const microareas = Array.from(new Set(pacientes.map(p => p.microarea).filter(Boolean))).sort();
 
   useEffect(() => {
     let cancel = false;
@@ -154,9 +164,20 @@ export default function PaginaResumo() {
   };
   const pacientesPrioritarios = pacientes.filter(isPrioritario);
   const idsPrioritarios = new Set(pacientesPrioritarios.map((p) => p.id));
+  const pacienteMap = new Map(pacientes.map(p => [p.id, p]));
   const acompsPrioritarios = acomps
     .filter((a) => idsPrioritarios.has(a.paciente_id))
-    .filter((a) => filtroStatus === "todas" || (filtroStatus === "PENDENTE" ? !a.situacao_pos_busca : a.situacao_pos_busca === filtroStatus));
+    .filter((a) => {
+      if (filtroUnidade !== "todas" || filtroEquipe !== "todas" || filtroMicroarea !== "todas") {
+        const p = pacienteMap.get(a.paciente_id);
+        if (!p) return false;
+        if (filtroUnidade !== "todas" && p.unidade !== filtroUnidade) return false;
+        if (filtroEquipe !== "todas" && p.equipe !== filtroEquipe) return false;
+        if (filtroMicroarea !== "todas" && p.microarea !== filtroMicroarea) return false;
+      }
+      if (filtroStatus === "todas") return true;
+      return filtroStatus === "PENDENTE" ? !a.situacao_pos_busca : a.situacao_pos_busca === filtroStatus;
+    });
 
   const totalPacientes = pacientesPrioritarios.length;
   const totalAcomps = acompsPrioritarios.length;
@@ -460,12 +481,32 @@ export default function PaginaResumo() {
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
 
         <div className="relative mx-auto flex max-w-[1380px] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2.5">
-            <div className="h-6 w-0.5 rounded-full bg-gradient-to-b from-cyan-400 to-cyan-600" />
-            <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
-              RESUMO <span className="text-cyan-300 font-bold">GERAL</span>
-            </h1>
-          </div>
+          <div className="flex flex-col gap-1 pt-1 sm:pt-0">
+              <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
+                RESUMO <span className="text-cyan-300 font-bold">GERAL</span>
+              </h1>
+            </div>
+
+            <button
+              onClick={() => {
+                setMostrarAvancada(!mostrarAvancada);
+                if (!mostrarAvancada) {
+                  setFiltroUnidadeDraft(filtroUnidade);
+                  setFiltroEquipeDraft(filtroEquipe);
+                  setFiltroMicroareaDraft(filtroMicroarea);
+                  setFiltroStatusDraft(filtroStatus);
+                }
+              }}
+              className="relative ml-auto flex items-center gap-2 rounded-xl bg-white/[0.07] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/60 ring-1 ring-white/10 transition-all duration-200 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"
+            >
+              <svg className="h-4 w-4 text-cyan-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+              Filtros Avançados
+              {filtrosAtivos > 0 && (
+                <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[9px] font-bold text-cyan-300 ring-1 ring-cyan-400/30">
+                  {filtrosAtivos} ativo{filtrosAtivos !== 1 ? "s" : ""}
+                </span>
+              )}
+            </button>
           <div className="flex items-baseline gap-2">
             <svg className="h-4 w-4 text-amber-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -476,91 +517,143 @@ export default function PaginaResumo() {
         </div>
       </div>
 
-      {/* ── Toggle Filtro por Status ────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950">
-        <div className="mx-auto max-w-[1380px] px-5 sm:px-6 pb-4">
-          {/* Botão toggle */}
-          <button
-            onClick={() => {
-              setMostrarAvancada(!mostrarAvancada);
-              if (!mostrarAvancada) setFiltroStatusDraft(filtroStatus);
-            }}
-            className="flex w-full items-center justify-between rounded-xl bg-white/[0.05] px-3.5 py-2.5 ring-1 ring-white/10 transition-all hover:bg-white/[0.08]"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="h-3.5 w-3.5 text-white/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-              </svg>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-                Filtrar por Situação Pós-Busca
-              </span>
+      {/* ── Filtros Avançados ────────────────────────────────────── */}
+      {mostrarAvancada && (
+        <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 px-5 sm:px-6 pb-4">
+          <div className="mx-auto max-w-[1380px] overflow-hidden rounded-2xl bg-gradient-to-br from-white/[0.07] to-white/[0.03] ring-1 ring-white/[0.12] shadow-lg shadow-black/20 backdrop-blur-xl">
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.08] ring-1 ring-white/[0.1]">
+                  <svg className="h-3.5 w-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-widest text-white/60">Filtros Avançados</span>
+              </div>
+              <button onClick={() => setMostrarAvancada(false)} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
             </div>
-            <div className="flex items-center gap-2">
-              {filtrosAtivos > 0 && !mostrarAvancada && (
-                <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[9px] font-bold text-cyan-300 ring-1 ring-cyan-400/30">
-                  {filtrosAtivos} ativo{filtrosAtivos !== 1 ? "s" : ""}
-                </span>
-              )}
-              <svg className={`h-4 w-4 text-white/40 transition-transform duration-200 ${mostrarAvancada ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-          </button>
 
-          {/* Painel de filtros (expansível) */}
-          {mostrarAvancada && (
-            <div className="mt-3 rounded-xl bg-white/[0.05] p-3.5 ring-1 ring-white/10">
-              <label className="mb-2.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-white/40">
-                Selecione o status
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
-                  { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
-                  { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
-                  { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
-                  { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
-                  { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
-                  { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
-                  { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
-                ].map((s) => (
-                  <button
-                    key={s.key}
-                    onClick={() => setFiltroStatusDraft(filtroStatusDraft === s.key ? "todas" : s.key)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
-                      filtroStatusDraft === s.key ? s.cls : "bg-white/[0.07] text-white/60 hover:bg-white/[0.12] hover:text-white/80 ring-1 ring-white/10"
-                    }`}
-                  >
-                    {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
-                    <span className={filtroStatusDraft === s.key ? "" : "text-white/60"}>{s.label}</span>
-                  </button>
-                ))}
+            <div className="flex items-center gap-2 px-4 pt-3">
+              <div className="h-px flex-1 bg-white/5" />
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/25">Filtros</span>
+              <div className="h-px flex-1 bg-white/5" />
+            </div>
+
+            {/* Grid de selects compacto */}
+            <div className="grid grid-cols-1 gap-2 px-4 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Unidade */}
+              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-sky-400/10 ring-1 ring-sky-400/20">
+                  <svg className="h-2.5 w-2.5 text-sky-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
+                </div>
+                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Unidade</span>
+                <select value={filtroUnidadeDraft} onChange={(e) => setFiltroUnidadeDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
+                  <option value="todas">Todas</option>
+                  {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
               </div>
-              <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3">
-                <button
-                  onClick={() => {
-                    setFiltroStatusDraft("todas");
-                    setFiltroStatus("todas");
-                    setMostrarAvancada(false);
-                  }}
-                  className="rounded-lg bg-white/[0.07] border border-white/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
-                >
-                  Limpar Filtro
-                </button>
-                <button
-                  onClick={() => {
-                    setFiltroStatus(filtroStatusDraft);
-                    setMostrarAvancada(false);
-                  }}
-                  className="rounded-lg bg-cyan-400/20 border border-cyan-400/30 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-cyan-300 shadow-sm transition-all hover:bg-cyan-400/30"
-                >
-                  Aplicar Filtro
-                </button>
+              {/* Equipe */}
+              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-400/10 ring-1 ring-violet-400/20">
+                  <svg className="h-2.5 w-2.5 text-violet-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
+                </div>
+                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Equipe</span>
+                <select value={filtroEquipeDraft} onChange={(e) => setFiltroEquipeDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
+                  <option value="todas">Todas</option>
+                  {equipes.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
+              {/* Microárea */}
+              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-400/10 ring-1 ring-emerald-400/20">
+                  <svg className="h-2.5 w-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
+                </div>
+                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Microárea</span>
+                <select value={filtroMicroareaDraft} onChange={(e) => setFiltroMicroareaDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
+                  <option value="todas">Todas</option>
+                  {microareas.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              {/* Grupo (placeholder) */}
+              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] opacity-50">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-amber-400/10 ring-1 ring-amber-400/20">
+                  <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                </div>
+                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Grupo</span>
+                <span className="flex-1 text-[11px] font-semibold text-white/30">—</span>
               </div>
             </div>
-          )}
+
+            <div className="flex items-center gap-2 px-4 pt-1">
+              <div className="h-px flex-1 bg-white/5" />
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/25">Status</span>
+              <div className="h-px flex-1 bg-white/5" />
+            </div>
+
+            {/* Status compacto */}
+            <div className="mx-4 mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06]">
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-cyan-400/10 ring-1 ring-cyan-400/20">
+                <svg className="h-2.5 w-2.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+              </div>
+              <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 mr-1">Status</span>
+              {[
+                { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
+                { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
+                { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
+                { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
+                { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
+                { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
+                { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
+                { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
+              ].map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setFiltroStatusDraft(filtroStatusDraft === s.key ? "todas" : s.key)}
+                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                    filtroStatusDraft === s.key ? s.cls : "bg-white/[0.05] text-white/50 hover:bg-white/[0.1] hover:text-white/70 ring-1 ring-white/[0.08]"
+                  }`}
+                >
+                  {s.dot && <span className={`h-1 w-1 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mx-4 flex items-center gap-2">
+              <div className="h-px flex-1 bg-white/5" />
+            </div>
+
+            {/* Ações compactas */}
+            <div className="flex items-center justify-end gap-2 px-4 pb-3">
+              <button
+                onClick={() => {
+                  setFiltroUnidadeDraft("todas"); setFiltroUnidade("todas");
+                  setFiltroEquipeDraft("todas"); setFiltroEquipe("todas");
+                  setFiltroMicroareaDraft("todas"); setFiltroMicroarea("todas");
+                  setFiltroStatusDraft("todas"); setFiltroStatus("todas");
+                  setMostrarAvancada(false);
+                }}
+                className="rounded-lg border border-white/10 bg-white/[0.07] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
+              >
+                Limpar
+              </button>
+              <button
+                onClick={() => {
+                  setFiltroUnidade(filtroUnidadeDraft);
+                  setFiltroEquipe(filtroEquipeDraft);
+                  setFiltroMicroarea(filtroMicroareaDraft);
+                  setFiltroStatus(filtroStatusDraft);
+                  setMostrarAvancada(false);
+                }}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-lg shadow-cyan-500/30 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl active:scale-[0.97]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                Aplicar
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mx-auto max-w-[1380px] px-4 py-8 sm:px-6 lg:px-8" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(148,163,184,0.10) 1px, transparent 0)', backgroundSize: '28px 28px' }}>
 
