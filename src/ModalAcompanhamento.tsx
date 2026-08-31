@@ -356,11 +356,33 @@ function MultiSelect({
       {aberto && (
         <div
           ref={dropdownRef}
-          className={`absolute z-[99999] w-full rounded-2xl border border-slate-200/80 bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-black/5 ${
+          className={`absolute z-[99999] w-full rounded-2xl border border-slate-200/80 bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-black/5 overflow-hidden ${
             flip ? "bottom-full mb-1.5 top-auto" : "top-full mt-1.5"
           }`}
         >
-          <div className="max-h-60 overflow-y-auto p-1">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-3 py-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              {valores.length === 0 ? "Nenhum selecionado" : `${valores.length} selecionado${valores.length !== 1 ? "s" : ""}`}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => { if (valores.length === opcoes.length) onChange([]); else onChange([...opcoes]); }}
+                className="rounded-lg px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider transition-all duration-150 hover:scale-105 active:scale-95"
+              >
+                <span className="text-cyan-600 hover:text-cyan-700">{valores.length === opcoes.length ? "Nenhuma" : "Todas"}</span>
+              </button>
+              <div className="h-3 w-px bg-slate-200" />
+              <button
+                type="button"
+                onClick={() => setAberto(false)}
+                className="rounded-lg bg-gradient-to-r from-slate-800 to-slate-700 px-2.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:from-slate-700 hover:to-slate-600 hover:shadow-md active:scale-95"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1.5">
             {opcoes.map((opt) => {
               const selecionado = valores.includes(opt);
               return (
@@ -374,28 +396,19 @@ function MultiSelect({
                       : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <span className={`flex h-4.5 w-4.5 flex-shrink-0 items-center justify-center rounded-md border transition-all duration-150 ${
+                  <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-200 ${
                     selecionado
                       ? "border-cyan-500 bg-gradient-to-br from-cyan-500 to-blue-500 shadow-sm shadow-cyan-400/30"
-                      : "border-slate-300"
+                      : "border-slate-300 hover:border-cyan-300"
                   }`}>
                     {selecionado && (
                       <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5"/></svg>
                     )}
                   </span>
-                  <span className="text-[11px] font-bold uppercase tracking-wide leading-tight">{opt}</span>
+                  <span className={`text-[11px] font-bold uppercase tracking-wide leading-tight transition-colors duration-150 ${selecionado ? "text-cyan-700" : ""}`}>{opt}</span>
                 </button>
               );
             })}
-          </div>
-          <div className="border-t border-slate-100 px-3 py-2">
-            <button
-              type="button"
-              onClick={() => setAberto(false)}
-              className="w-full rounded-xl bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all duration-200 hover:from-slate-800 hover:to-cyan-800"
-            >
-              Concluir ({valores.length} selecionado{valores.length !== 1 ? "s" : ""})
-            </button>
           </div>
         </div>
       )}
@@ -467,6 +480,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
     if (!tipoBusca) { setToast("Selecione o tipo de busca"); return; }
     if (!tipoContato) { setToast("Selecione o tipo de contato"); return; }
     if (!situacaoPosBusca) { setToast("Selecione a situação pós busca ativa"); return; }
+    if (entravesIdentificados.length > 0 && !entraveInformadoPor) { setToast("Informe quem identificou os entraves"); return; }
 
     setSalvando(true);
     setErro(null);
@@ -643,6 +657,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
                     onChange={setEntraveInformadoPor}
                     opcoes={ENTRAVES_INFORMADO_POR}
                     placeholder="Selecione"
+                    obrigatorio={entravesIdentificados.length > 0}
                     icone={Icone.info}
                   />
                 </div>

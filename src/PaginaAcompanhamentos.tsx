@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { Acompanhamento, Paciente } from "./types";
 import { buscarTodosAcompanhamentos, buscarAcompanhamentos, buscarPacientes, excluirAcompanhamento } from "./pocketbase";
 import { getCoresCategoria } from "./data";
+import { CustomSelect } from "./CustomSelect";
 import ModalAcompanhamento from "./ModalAcompanhamento";
 
 function formatarData(dateStr: string): string {
@@ -335,10 +336,7 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
                   <svg className="h-2.5 w-2.5 text-sky-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
                 </div>
                 <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Unidade</span>
-                <select value={filtroUnidadeDraft} onChange={(e) => setFiltroUnidadeDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
-                  <option value="todas">Todas</option>
-                  {unidades.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                <CustomSelect value={filtroUnidadeDraft} onChange={setFiltroUnidadeDraft} options={[{ value: "todas", label: "Todas" }, ...unidades.map(u => ({ value: u, label: u }))]} />
               </div>
               {/* Equipe */}
               <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
@@ -346,10 +344,7 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
                   <svg className="h-2.5 w-2.5 text-violet-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
                 </div>
                 <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Equipe</span>
-                <select value={filtroEquipeDraft} onChange={(e) => setFiltroEquipeDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
-                  <option value="todas">Todas</option>
-                  {equipes.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
+                <CustomSelect value={filtroEquipeDraft} onChange={setFiltroEquipeDraft} options={[{ value: "todas", label: "Todas" }, ...equipes.map(e => ({ value: e, label: e }))]} />
               </div>
               {/* Microárea */}
               <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
@@ -357,10 +352,7 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
                   <svg className="h-2.5 w-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
                 </div>
                 <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Microárea</span>
-                <select value={filtroMicroareaDraft} onChange={(e) => setFiltroMicroareaDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
-                  <option value="todas">Todas</option>
-                  {microareas.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
+                <CustomSelect value={filtroMicroareaDraft} onChange={setFiltroMicroareaDraft} options={[{ value: "todas", label: "Todas" }, ...microareas.map(m => ({ value: m, label: m }))]} />
               </div>
               {/* Grupo */}
               <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
@@ -368,13 +360,7 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
                   <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" /></svg>
                 </div>
                 <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Grupo</span>
-                <select value={filtroGrupoDraft} onChange={(e) => setFiltroGrupoDraft(e.target.value)} className="flex-1 min-w-0 bg-transparent text-[11px] font-semibold text-white/80 outline-none cursor-pointer appearance-none">
-                  <option value="todos">Todos</option>
-                  <option value="gestante">Gestantes</option>
-                  <option value="crianca">Crianças ≤2a</option>
-                  <option value="tb">TB</option>
-                  <option value="tabagista">Tabagistas</option>
-                </select>
+                <CustomSelect value={filtroGrupoDraft} onChange={setFiltroGrupoDraft} options={[{ value: "todos", label: "Todos" }, { value: "gestante", label: "Gestantes" }, { value: "crianca", label: "Crianças ≤2a" }, { value: "tb", label: "TB" }, { value: "tabagista", label: "Tabagistas" }]} />
               </div>
             </div>
 

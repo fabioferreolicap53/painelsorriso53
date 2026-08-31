@@ -1,16 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#60a5fa"/>
-    </linearGradient>
-  </defs>
-  <!-- fundo arredondado -->
-  <rect width="32" height="32" rx="7" fill="url(#g)"/>
-  <!-- olhos -->
-  <circle cx="11" cy="13" r="2.2" fill="#0f172a"/>
-  <circle cx="21" cy="13" r="2.2" fill="#0f172a"/>
-  <!-- sorriso boca aberta (mood) -->
-  <path d="M6 18 Q16 29 26 18" stroke="#0f172a" stroke-width="4" fill="none" stroke-linecap="round"/>
-  <path d="M8 18 Q16 26 24 18" fill="#0f172a"/>
+  <rect width="32" height="32" rx="8" fill="#7dd3fc"/>
+  <circle cx="11" cy="13" r="2" fill="#1e293b"/>
+  <circle cx="21" cy="13" r="2" fill="#1e293b"/>
+  <path d="M9 19 Q16 25 23 19" stroke="#1e293b" stroke-width="2" fill="none" stroke-linecap="round"/>
 </svg>
