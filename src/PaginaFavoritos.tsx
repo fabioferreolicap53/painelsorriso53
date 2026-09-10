@@ -6,6 +6,8 @@ import { getCoresCategoria } from "./data";
 import { CustomSelect } from "./CustomSelect";
 import ModalAcompanhamento from "./ModalAcompanhamento";
 import ModalDetalhes from "./ModalDetalhes";
+import { BadgeResolucao } from "./ResolucaoUI";
+import { classificarResolucao } from "./resolucao";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -169,6 +171,7 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<string>("todos");
+  const [filtroResolucao, setFiltroResolucao] = useState<string>("todos");
   const [filtroUnidade, setFiltroUnidade] = useState<string>("todas");
   const [filtroEquipe, setFiltroEquipe] = useState<string>("todas");
   const [filtroMicroarea, setFiltroMicroarea] = useState<string>("todas");
@@ -178,10 +181,16 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
   const [filtroMicroareaDraft, setFiltroMicroareaDraft] = useState<string>("todas");
   const [filtroStatusDraft, setFiltroStatusDraft] = useState<string>("todas");
   const [filtroGrupoDraft, setFiltroGrupoDraft] = useState<string>("todos");
+  const [filtroTipoBusca, setFiltroTipoBusca] = useState<string>("todas");
+  const [filtroTipoContato, setFiltroTipoContato] = useState<string>("todas");
+  const [filtroTipoBuscaDraft, setFiltroTipoBuscaDraft] = useState<string>("todas");
+  const [filtroTipoContatoDraft, setFiltroTipoContatoDraft] = useState<string>("todas");
 
   const filtrosAtivos = [filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus]
     .filter((v) => v !== "todas").length
-    + (filtro !== "todos" ? 1 : 0);
+    + (filtro !== "todos" ? 1 : 0)
+    + (filtroTipoBusca !== "todas" ? 1 : 0) + (filtroTipoContato !== "todas" ? 1 : 0)
+    + (filtroResolucao !== "todos" ? 1 : 0);
 
   const [mostrarBusca, setMostrarBusca] = useState(false);
   const [mostrarAvancada, setMostrarAvancada] = useState(false);
@@ -194,7 +203,9 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
   const [pacienteModal, setPacienteModal] = useState<Paciente | null>(null);
   const [pacienteAcompModal, setPacienteAcompModal] = useState<Paciente | null>(null);
   const [acompCounts, setAcompCounts] = useState<Record<string, number>>({});
-  const [lastDesfechoMap, setLastDesfechoMap] = useState<Record<string, { desfecho: string; dataBusca: string; dataAgendamento: string }>>({});
+  const [lastDesfechoMap, setLastDesfechoMap] = useState<Record<string, { desfecho: string; dataBusca: string; dataAgendamento: string; resolucao?: string | null }>>({});
+  const [tipoBuscaMap, setTipoBuscaMap] = useState<Record<string, Set<string>>>({});
+  const [tipoContatoMap, setTipoContatoMap] = useState<Record<string, Set<string>>>({});
   const [pagina, setPagina] = useState(1);
   const [sortField, setSortField] = useState<string>("paciente");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -208,7 +219,7 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
     }
   };
 
-  useEffect(() => { setPagina(1); }, [favoritos, busca, filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus, sortField]);
+  useEffect(() => { setPagina(1); }, [favoritos, busca, filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus, filtroTipoBusca, filtroTipoContato, sortField]);
 
   useEffect(() => {
     let cancelado = false;
@@ -266,7 +277,9 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
       .then((items) => {
         if (cancel) return;
         const countMap: Record<string, number> = {};
-        const desfechoMap: Record<string, { desfecho: string; dataBusca: string; dataAgendamento: string }> = {};
+        const desfechoMap: Record<string, { desfecho: string; dataBusca: string; dataAgendamento: string; resolucao?: string | null }> = {};
+        const tbMap: Record<string, Set<string>> = {};
+        const tcMap: Record<string, Set<string>> = {};
         items.forEach((a) => {
           countMap[a.paciente_id] = (countMap[a.paciente_id] || 0) + 1;
           if (!desfechoMap[a.paciente_id] && a.situacao_pos_busca) {
@@ -274,11 +287,22 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               desfecho: a.situacao_pos_busca,
               dataBusca: a.data_da_busca || "",
               dataAgendamento: a.situacao_pos_busca === "AGENDAMENTO APÓS CONTATO DIRETO" ? (a.data_agendamento_apos_contato_direto || "") : "",
+              resolucao: a.resolucao,
             };
+          }
+          if (a.tipo_busca) {
+            if (!tbMap[a.paciente_id]) tbMap[a.paciente_id] = new Set();
+            tbMap[a.paciente_id].add(a.tipo_busca);
+          }
+          if (a.tipo_contato) {
+            if (!tcMap[a.paciente_id]) tcMap[a.paciente_id] = new Set();
+            tcMap[a.paciente_id].add(a.tipo_contato);
           }
         });
         setAcompCounts(countMap);
         setLastDesfechoMap(desfechoMap);
+        setTipoBuscaMap(tbMap);
+        setTipoContatoMap(tcMap);
       })
       .catch(() => {});
     return () => { cancel = true; };
@@ -347,7 +371,12 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
       || (filtroStatus === "PENDENTE" && !lastDesfechoMap[p.id]?.desfecho)
       || lastDesfechoMap[p.id]?.desfecho === filtroStatus;
 
-    return matchBusca && matchFiltro && matchUnidade && matchEquipe && matchMicroarea && matchStatus;
+    const matchTipoBusca = filtroTipoBusca === "todas" || (tipoBuscaMap[p.id]?.has(filtroTipoBusca) ?? false);
+    const matchTipoContato = filtroTipoContato === "todas" || (tipoContatoMap[p.id]?.has(filtroTipoContato) ?? false);
+
+    const matchResolucao = filtroResolucao === "todos" || classificarResolucao(lastDesfechoMap[p.id]?.desfecho, lastDesfechoMap[p.id]?.resolucao) === filtroResolucao;
+
+    return matchBusca && matchFiltro && matchUnidade && matchEquipe && matchMicroarea && matchStatus && matchTipoBusca && matchTipoContato && matchResolucao;
   });
 
   const filtradosSorted = [...filtrados].sort((a, b) => {
@@ -402,6 +431,25 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
               </button>
             ))}
             <div className="h-4 w-px bg-white/10" />
+            {[
+              { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+              { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+              { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
+            ].map(({ key, label, activeColor, activeBorder, icon }) => (
+              <button
+                key={key}
+                onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
+                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
+                  filtroResolucao === key
+                    ? `${activeColor} ${activeBorder}`
+                    : "text-white/40 border-transparent hover:text-white/70"
+                }`}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+            <div className="h-4 w-px bg-white/10" />
             <div className="flex items-baseline gap-2">
               <svg className="h-4 w-4 text-amber-300/70" fill="currentColor" viewBox="0 0 24 24">
                 <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
@@ -429,6 +477,8 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                   setFiltroMicroareaDraft(filtroMicroarea);
                   setFiltroStatusDraft(filtroStatus);
                   setFiltroGrupoDraft(filtro);
+                  setFiltroTipoBuscaDraft(filtroTipoBusca);
+                  setFiltroTipoContatoDraft(filtroTipoContato);
                 }
               }}
               className="relative ml-auto flex items-center gap-2 rounded-xl bg-white/[0.07] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/60 ring-1 ring-white/10 transition-all duration-200 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"
@@ -474,75 +524,64 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
           <div className="mx-auto max-w-[1380px] overflow-visible rounded-2xl bg-gradient-to-br from-white/[0.07] to-white/[0.03] ring-1 ring-white/[0.12] shadow-lg shadow-black/20 backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-3.5">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.08] ring-1 ring-white/[0.1]">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
                   <svg className="h-3.5 w-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
                 </div>
-                <span className="text-xs font-bold uppercase tracking-widest text-white/60">Filtros Avançados</span>
+                <span className="text-sm font-bold uppercase tracking-widest text-white/60">Filtros Avançados</span>
               </div>
-              <button onClick={() => setMostrarAvancada(false)} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
+              <button onClick={() => setMostrarAvancada(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="flex items-center gap-2 px-4 pt-3">
-              <div className="h-px flex-1 bg-white/5" />
-              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/25">Filtros</span>
-              <div className="h-px flex-1 bg-white/5" />
-            </div>
-
             {/* Grid de selects compacto */}
-            <div className="grid grid-cols-1 gap-2 px-4 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 px-6 pt-4 sm:grid-cols-2 lg:grid-cols-4">
               {/* Unidade */}
-              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-sky-400/10 ring-1 ring-sky-400/20">
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 ring-1 ring-sky-400/20">
                   <svg className="h-2.5 w-2.5 text-sky-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
                 </div>
-                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Unidade</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Unidade</span>
                 <CustomSelect value={filtroUnidadeDraft} onChange={setFiltroUnidadeDraft} options={[{ value: "todas", label: "Todas" }, ...unidades.map(u => ({ value: u, label: u }))]} />
               </div>
               {/* Equipe */}
-              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-violet-400/10 ring-1 ring-violet-400/20">
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-violet-400/10 ring-1 ring-violet-400/20">
                   <svg className="h-2.5 w-2.5 text-violet-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>
                 </div>
-                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Equipe</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Equipe</span>
                 <CustomSelect value={filtroEquipeDraft} onChange={setFiltroEquipeDraft} options={[{ value: "todas", label: "Todas" }, ...equipes.map(e => ({ value: e, label: e }))]} />
               </div>
               {/* Microárea */}
-              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-emerald-400/10 ring-1 ring-emerald-400/20">
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 ring-1 ring-emerald-400/20">
                   <svg className="h-2.5 w-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
                 </div>
-                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Microárea</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Microárea</span>
                 <CustomSelect value={filtroMicroareaDraft} onChange={setFiltroMicroareaDraft} options={[{ value: "todas", label: "Todas" }, ...microareas.map(m => ({ value: m, label: m }))]} />
               </div>
               {/* Grupo */}
-              <div className="flex items-center gap-2.5 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-amber-400/10 ring-1 ring-amber-400/20">
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 ring-1 ring-amber-400/20">
                   <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" /></svg>
                 </div>
-                <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 shrink-0">Grupo</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Grupo</span>
                 <CustomSelect value={filtroGrupoDraft} onChange={setFiltroGrupoDraft} options={[{ value: "todos", label: "Todos" }, { value: "gestante", label: "Gestantes" }, { value: "crianca", label: "Crianças ≤2a" }, { value: "tb", label: "TB" }, { value: "tabagista", label: "Tabagistas" }]} />
               </div>
             </div>
 
-            <div className="flex items-center gap-2 px-4 pt-1">
-              <div className="h-px flex-1 bg-white/5" />
-              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-white/25">Status</span>
-              <div className="h-px flex-1 bg-white/5" />
-            </div>
-
-            {/* Status compacto */}
-            <div className="mx-4 mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2 ring-1 ring-white/[0.06]">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-cyan-400/10 ring-1 ring-cyan-400/20">
-                <svg className="h-2.5 w-2.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+            {/* Status do Desfecho */}
+            <div className="mx-6 mb-4 rounded-xl bg-white/[0.05] px-5 py-3 ring-1 ring-white/[0.08]">
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 mr-1">Status do Desfecho</span>
               </div>
-              <span className="text-[8px] font-bold uppercase tracking-wider text-white/40 mr-1">Status</span>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
               {[
                 { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
                 { key: "PENDENTE", label: "Pendente", dot: "bg-slate-400", cls: "bg-slate-100 text-slate-800 shadow-sm ring-1 ring-slate-300/60" },
                 { key: "AGENDAMENTO APÓS CONTATO DIRETO", label: "Agendamento", dot: "bg-emerald-400", cls: "bg-emerald-400/20 text-emerald-300 shadow-sm ring-1 ring-emerald-400/30" },
+                { key: "CONSULTA NA ODONTO REALIZADA", label: "Odonto", dot: "bg-teal-400", cls: "bg-teal-400/20 text-teal-300 shadow-sm ring-1 ring-teal-400/30" },
                 { key: "CONVITE PARA DEMANDA LIVRE", label: "Demanda Livre", dot: "bg-cyan-400", cls: "bg-cyan-400/20 text-cyan-300 shadow-sm ring-1 ring-cyan-400/30" },
-                { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mudança Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
+                { key: "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Mud. Terr.", dot: "bg-blue-400", cls: "bg-blue-400/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30" },
                 { key: "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)", label: "Óbito", dot: "bg-slate-500", cls: "bg-slate-400/20 text-slate-300 shadow-sm ring-1 ring-slate-400/30" },
                 { key: "NÃO LOCALIZADA", label: "Não Localizada", dot: "bg-amber-400", cls: "bg-amber-400/20 text-amber-300 shadow-sm ring-1 ring-amber-400/30" },
                 { key: "RECUSA", label: "Recusa", dot: "bg-red-400", cls: "bg-red-400/20 text-red-300 shadow-sm ring-1 ring-red-400/30" },
@@ -550,22 +589,48 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                 <button
                   key={s.key}
                   onClick={() => setFiltroStatusDraft(filtroStatusDraft === s.key ? "todas" : s.key)}
-                  className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                  className={`inline-flex items-center gap-1 rounded-xl px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
                     filtroStatusDraft === s.key ? s.cls : "bg-white/[0.05] text-white/50 hover:bg-white/[0.1] hover:text-white/70 ring-1 ring-white/[0.08]"
                   }`}
                 >
-                  {s.dot && <span className={`h-1 w-1 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
+                  {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
                   {s.label}
                 </button>
               ))}
+              </div>
             </div>
 
-            <div className="mx-4 flex items-center gap-2">
-              <div className="h-px flex-1 bg-white/5" />
+            <div className="grid grid-cols-1 gap-3 px-5 pt-3 sm:grid-cols-2">
+              {/* Tipo de Busca */}
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-teal-400/10 ring-1 ring-teal-400/20">
+                  <svg className="h-2.5 w-2.5 text-teal-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Tipo Busca</span>
+                <CustomSelect value={filtroTipoBuscaDraft} onChange={setFiltroTipoBuscaDraft} options={[
+                  { value: "todas", label: "Todas" },
+                  { value: "BUSCA ATIVA - VISITA DOMICILIAR REGISTRADA EM PRONTUÁRIO", label: "Visita Domiciliar" },
+                  { value: "BUSCA ATIVA - CONTATO TELEFÔNICO (LIGAÇÃO) REGISTRADA EM PRONTUÁRIO", label: "Contato Telefônico" },
+                  { value: "BUSCA ATIVA - MENSAGEM REGISTRADA EM PRONTUÁRIO", label: "Mensagem" },
+                ]} />
+              </div>
+              {/* Tipo de Contato */}
+              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-400/10 ring-1 ring-rose-400/20">
+                  <svg className="h-2.5 w-2.5 text-rose-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Tipo Contato</span>
+                <CustomSelect value={filtroTipoContatoDraft} onChange={setFiltroTipoContatoDraft} options={[
+                  { value: "todas", label: "Todas" },
+                  { value: "CONTATO DIRETO (CONVERSA)", label: "Contato Direto" },
+                  { value: "CONTATO INDIRETO (MENSAGEM)", label: "Contato Indireto" },
+                  { value: "NÃO HOUVE CONTATO (NÃO LOCALIZADA; LIGAÇÃO NÃO ATENDIDA...)", label: "Não Houve Contato" },
+                ]} />
+              </div>
             </div>
 
             {/* Ações compactas */}
-            <div className="flex items-center justify-end gap-2 px-4 pb-3">
+            <div className="flex items-center justify-end gap-2 px-6 pb-4 pt-2">
               <button
                 onClick={() => {
                   setFiltroUnidadeDraft("todas"); setFiltroUnidade("todas");
@@ -573,9 +638,11 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                   setFiltroMicroareaDraft("todas"); setFiltroMicroarea("todas");
                   setFiltroGrupoDraft("todos"); setFiltro("todos");
                   setFiltroStatusDraft("todas"); setFiltroStatus("todas");
+                  setFiltroTipoBuscaDraft("todas"); setFiltroTipoBusca("todas");
+                  setFiltroTipoContatoDraft("todas"); setFiltroTipoContato("todas");
                   setMostrarAvancada(false);
                 }}
-                className="rounded-lg border border-white/10 bg-white/[0.07] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
+                className="rounded-xl border border-white/10 bg-white/[0.07] px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
               >
                 Limpar
               </button>
@@ -586,9 +653,11 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                   setFiltroMicroarea(filtroMicroareaDraft);
                   setFiltro(filtroGrupoDraft);
                   setFiltroStatus(filtroStatusDraft);
+                  setFiltroTipoBusca(filtroTipoBuscaDraft);
+                  setFiltroTipoContato(filtroTipoContatoDraft);
                   setMostrarAvancada(false);
                 }}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-lg shadow-cyan-500/30 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl active:scale-[0.97]"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider text-white shadow-lg shadow-cyan-500/30 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl active:scale-[0.97]"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
                 Aplicar
@@ -623,6 +692,35 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
         ) : (
           <>
             {/* ═══ TABELA DESKTOP (xl+) ═══════════════════════════════ */}
+            {(() => {
+              const total = filtrados.length;
+              let resolvidos = 0;
+              let pendentes = 0;
+              let naoResolvidos = 0;
+              filtrados.forEach((p) => {
+                const s = classificarResolucao(lastDesfechoMap[p.id]?.desfecho, lastDesfechoMap[p.id]?.resolucao);
+                if (s === "resolvido") resolvidos++;
+                else if (s === "nao_resolvido") naoResolvidos++;
+                else pendentes++;
+              });
+              const pct = total > 0 ? Math.round((resolvidos / total) * 100) : 0;
+              return total > 0 ? (
+                <div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-100 px-4 py-2.5 ring-1 ring-slate-200/60">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Resolução</span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 flex">
+                    {resolvidos > 0 && <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(resolvidos / total) * 100}%` }} />}
+                    {pendentes > 0 && <div className="h-full bg-amber-400 transition-all duration-500" style={{ width: `${(pendentes / total) * 100}%` }} />}
+                    {naoResolvidos > 0 && <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${(naoResolvidos / total) * 100}%` }} />}
+                  </div>
+                  <div className="flex items-center gap-2 text-[9px] font-bold">
+                    <span className="text-emerald-600">{resolvidos} OK</span>
+                    <span className="text-amber-600">{pendentes} pend.</span>
+                    <span className="text-red-600">{naoResolvidos} falha</span>
+                  </div>
+                  <span className={`text-[10px] font-bold ${pct >= 70 ? "text-emerald-600" : pct >= 40 ? "text-amber-600" : "text-red-600"}`}>{pct}%</span>
+                </div>
+              ) : null;
+            })()}
             <div className="hidden overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-lg shadow-slate-200/80 xl:block" style={{ overflow: "visible" }}>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[900px]">
@@ -711,6 +809,7 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                         </td>
                         <td className="px-6 py-5 text-center align-top break-words">
                           <StatusBadge item={lastDesfechoMap[p.id]} />
+                          <BadgeResolucao situacao={lastDesfechoMap[p.id]?.desfecho} resolucao={lastDesfechoMap[p.id]?.resolucao} />
                         </td>
                         <td className="px-5 py-4 text-center align-top">
                           <div className="flex flex-col items-center gap-0.5">
@@ -844,6 +943,7 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                         </td>
                         <td className="px-6 py-5 text-center align-top break-words">
                           <StatusBadge item={lastDesfechoMap[p.id]} />
+                          <BadgeResolucao situacao={lastDesfechoMap[p.id]?.desfecho} resolucao={lastDesfechoMap[p.id]?.resolucao} />
                         </td>
                         <td className="px-5 py-4 text-center align-top">
                           <div className="flex flex-col items-center gap-0.5">
@@ -971,6 +1071,7 @@ export default function PaginaFavoritos({ usuarioId, onNavigateAcompFiltered }: 
                         {/* Col 2: Status */}
                         <td className="px-1 py-2.5 text-center align-top break-words" style={{ width: '18%' }}>
                           <StatusBadge item={lastDesfechoMap[p.id]} small />
+                          <BadgeResolucao situacao={lastDesfechoMap[p.id]?.desfecho} resolucao={lastDesfechoMap[p.id]?.resolucao} />
                         </td>
                         {/* Col 3: Paciente */}
                         <td className="px-2 py-2.5 text-center align-top" style={{ width: '42%' }}>

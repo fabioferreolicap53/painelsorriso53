@@ -47,6 +47,7 @@ export interface Acompanhamento {
   id: string;
   paciente_id: string;
   usuario_id: string;
+  cns?: string;
   data_da_busca: string;
   tipo_busca: string;
   tipo_contato: string;
@@ -55,6 +56,8 @@ export interface Acompanhamento {
   entraves_identificados: string;
   observacoes: string;
   data_agendamento_apos_contato_direto?: string; // data do agendamento (quando situacao = "AGENDAMENTO APÓS CONTATO DIRETO")
+  data_consulta_odonto?: string; // data da consulta odonto (quando situacao = "CONSULTA NA ODONTO REALIZADA")
+  resolucao?: string; // "RESOLVIDO" | "NÃO RESOLVIDO" | "PENDENTE"
   created?: string;
   updated?: string;
 }

@@ -201,8 +201,8 @@ export async function buscarTodosAcompanhamentos(): Promise<Acompanhamento[]> {
 }
 
 export async function excluirAcompanhamento(id: string): Promise<void> {
-  const res = await fetch(`${acompanhamentosBaseUrl()}/${id}`, {
-    method: "DELETE",
+  const res = await fetch(`${acompanhamentosBaseUrl()}/${id}?_method=DELETE`, {
+    method: "POST",
     headers: buildHeaders(),
   });
   if (!res.ok) {

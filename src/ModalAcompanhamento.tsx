@@ -9,6 +9,7 @@ const TIPOS_BUSCA = [
   "BUSCA ATIVA - VISITA DOMICILIAR REGISTRADA EM PRONTUÁRIO",
   "BUSCA ATIVA - CONTATO TELEFÔNICO (LIGAÇÃO) REGISTRADA EM PRONTUÁRIO",
   "BUSCA ATIVA - MENSAGEM REGISTRADA EM PRONTUÁRIO",
+  "SEM BUSCA ATIVA (CONTATO OPORTUNIZADO NO ACOLHIMENTO)",
 ];
 
 const TIPOS_CONTATO = [
@@ -27,6 +28,7 @@ const ENTRAVES_INFORMADO_POR = [
 
 const SITUAÇÕES_POS_BUSCA = [
   "AGENDAMENTO APÓS CONTATO DIRETO",
+  "CONSULTA NA ODONTO REALIZADA",
   "CONVITE PARA DEMANDA LIVRE",
   "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)",
   "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)",
@@ -430,8 +432,10 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
   const [entraveInformadoPor, setEntraveInformadoPor] = useState("");
   const [situacaoPosBusca, setSituacaoPosBusca] = useState("");
   const [dataAgendamento, setDataAgendamento] = useState("");
+  const [dataConsultaOdonto, setDataConsultaOdonto] = useState("");
   const [entravesIdentificados, setEntravesIdentificados] = useState<string[]>([]);
   const [observacoes, setObservacoes] = useState("");
+  const [resolvido, setResolvido] = useState<boolean | null>(null);
 
   const [modoForm, setModoForm] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -466,12 +470,14 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
     setEntraveInformadoPor(acompanhamentoEdit.entrave_informado_por || "");
     setSituacaoPosBusca(acompanhamentoEdit.situacao_pos_busca);
     setDataAgendamento(acompanhamentoEdit.data_agendamento_apos_contato_direto || "");
+    setDataConsultaOdonto(acompanhamentoEdit.data_consulta_odonto || "");
     setEntravesIdentificados(
       acompanhamentoEdit.entraves_identificados
         ? acompanhamentoEdit.entraves_identificados.split(";").map((e) => e.trim()).filter(Boolean)
         : []
     );
     setObservacoes(acompanhamentoEdit.observacoes || "");
+    setResolvido(acompanhamentoEdit.resolucao === "RESOLVIDO" ? true : acompanhamentoEdit.resolucao === "NÃO RESOLVIDO" ? false : null);
     setModoForm(true);
   }, [acompanhamentoEdit]);
 
@@ -495,6 +501,8 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
           entraves_identificados: entravesIdentificados.join("; "),
           observacoes,
           data_agendamento_apos_contato_direto: situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" ? dataAgendamento : "",
+          data_consulta_odonto: situacaoPosBusca === "CONSULTA NA ODONTO REALIZADA" ? dataConsultaOdonto : "",
+          resolucao: resolvido === true ? "RESOLVIDO" : resolvido === false ? "NÃO RESOLVIDO" : "PENDENTE",
         });
         setToast("Registro atualizado com sucesso!");
         onEditSalvo?.();
@@ -503,6 +511,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
         const novo = await criarAcompanhamento({
           paciente_id: paciente.id,
           usuario_id: usuarioId,
+          cns: paciente.n_cns_da_pessoa_cadastrada ?? "",
           data_da_busca: dataBusca,
           tipo_busca: tipoBusca,
           tipo_contato: tipoContato,
@@ -511,6 +520,8 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
           entraves_identificados: entravesIdentificados.join("; "),
           observacoes,
           data_agendamento_apos_contato_direto: situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" ? dataAgendamento : "",
+          data_consulta_odonto: situacaoPosBusca === "CONSULTA NA ODONTO REALIZADA" ? dataConsultaOdonto : "",
+          resolucao: resolvido === true ? "RESOLVIDO" : resolvido === false ? "NÃO RESOLVIDO" : "PENDENTE",
         });
         setAcompanhamentos((prev) => [novo, ...prev]);
         setToast("Registro salvo com sucesso!");
@@ -533,6 +544,8 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
     setEntravesIdentificados([]);
     setObservacoes("");
     setDataAgendamento("");
+    setDataConsultaOdonto("");
+    setResolvido(null);
   }
 
   async function handleExcluir(id: string) {
@@ -562,7 +575,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-xs font-semibold text-cyan-200/70 mb-0.5">
                   {Icone.prontuario}
-                  NOVO ACOMPANHAMENTO
+                  ACOMPANHAMENTO
                 </div>
                 <h2 className="truncate text-lg font-black text-white leading-tight">{paciente.paciente?.toUpperCase() || "PACIENTE"}</h2>
               </div>
@@ -671,7 +684,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
                   </div>
                   <p className="text-[11px] font-extrabold uppercase tracking-widest text-emerald-700">Desfecho</p>
                 </div>
-                <div className={`grid gap-x-3 gap-y-2.5 ${situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+                <div className={`grid gap-x-3 gap-y-2.5 ${(situacaoPosBusca === "AGENDAMENTO APÓS CONTATO DIRETO" || situacaoPosBusca === "CONSULTA NA ODONTO REALIZADA") ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
                   <SelectField
                     label="Situação Pós Busca Ativa"
                     valor={situacaoPosBusca}
@@ -690,6 +703,54 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
                       <InputData valor={dataAgendamento} onChange={setDataAgendamento} />
                     </div>
                   )}
+                  {situacaoPosBusca === "CONSULTA NA ODONTO REALIZADA" && (
+                    <div>
+                      <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg>
+                        Data da Consulta <span className="text-red-500">*</span>
+                      </label>
+                      <InputData valor={dataConsultaOdonto} onChange={setDataConsultaOdonto} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Toggle de Resolução */}
+                <div className="mt-3 flex items-center gap-3 rounded-lg bg-white/60 px-3 py-2.5 ring-1 ring-slate-200/60">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-cyan-500/10">
+                    <svg className="h-3.5 w-3.5 text-cyan-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+                  </div>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Resolução</span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setResolvido(resolvido === true ? null : true)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                        resolvido === true
+                          ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20"
+                          : "bg-white ring-1 ring-slate-200 text-slate-400 hover:ring-emerald-300 hover:text-emerald-600"
+                      }`}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                      Resolvido
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setResolvido(resolvido === false ? null : false)}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                        resolvido === false
+                          ? "bg-red-500 text-white shadow-md shadow-red-500/20"
+                          : "bg-white ring-1 ring-slate-200 text-slate-400 hover:ring-red-300 hover:text-red-600"
+                      }`}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                      Não Resolvido
+                    </button>
+                  </div>
+                  <span className={`ml-1 text-[9px] font-bold uppercase tracking-wider ${
+                    resolvido === true ? "text-emerald-500" : resolvido === false ? "text-red-500" : "text-amber-500"
+                  }`}>
+                    {resolvido === true ? "Resolvido" : resolvido === false ? "Não Resolvido" : "Pendente"}
+                  </span>
                 </div>
               </div>
 

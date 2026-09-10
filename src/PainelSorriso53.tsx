@@ -239,7 +239,13 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
 // ── Componente Principal ─────────────────────────────────────────────────
 
 export default function PainelSorriso53() {
-  const [pagina, setPagina] = useState<Pagina>("resumo");
+  const [pagina, setPagina] = useState<Pagina>(() => {
+    try {
+      const saved = localStorage.getItem("pb_pagina_atual") as Pagina | null;
+      if (saved && ["resumo", "pacientes", "favoritos", "acompanhamentos", "configuracoes"].includes(saved)) return saved;
+    } catch { /* ignore */ }
+    return "resumo";
+  });
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const stored = localStorage.getItem("pb_user");
@@ -251,6 +257,7 @@ export default function PainelSorriso53() {
   const handleNavigate = useCallback((p: Pagina) => {
     setSelectedPacienteId(null);
     setPagina(p);
+    try { localStorage.setItem("pb_pagina_atual", p); } catch { /* ignore */ }
   }, []);
 
   const handleNavigateAcompFiltered = useCallback((pacienteId: string) => {
@@ -267,6 +274,7 @@ export default function PainelSorriso53() {
     try {
       localStorage.removeItem("pb_auth_token");
       localStorage.removeItem("pb_user");
+      localStorage.removeItem("pb_pagina_atual");
     } catch { /* ignore */ }
     setUser(null);
     setPagina("resumo");
