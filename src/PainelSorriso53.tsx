@@ -119,6 +119,12 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
 
         {/* User + Ações */}
         <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+          {/* Badge do perfil/role */}
+          <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-cyan-300 ring-1 ring-white/10">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+            {user.role === "cap" ? "CAP" : user.role === "odonto" ? "Odonto" : user.role === "admin" ? "Admin" : "Unidade"}
+          </span>
+
           {/* Engrenagem — configurações (só em lg+ pra não competir espaço) */}
           <button
             onClick={() => onNavigate("configuracoes")}
