@@ -13,11 +13,12 @@ export function BadgeResolucao({ situacao, resolucao }: { situacao?: string; res
   const c = CORES[status];
   const icon = status === "resolvido" ? "✓" : status === "pendente" ? "◔" : "✗";
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ring-1 shadow-sm ${c.bg} ${c.text} ${c.ring}`}>
-      <span className={`flex h-4 w-4 items-center justify-center rounded-md text-[9px] font-black ${c.dot} text-white`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[7px] font-black uppercase tracking-wider ring-1 shadow-sm sm:gap-1.5 sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[10px] ${c.bg} ${c.text} ${c.ring}`}>
+      <span className={`flex h-3 w-3 items-center justify-center rounded text-[6px] font-black sm:h-4 sm:w-4 sm:rounded-md sm:text-[9px] ${c.dot} text-white`}>
         {icon}
       </span>
-      {c.label}
+      <span className="hidden sm:inline">{c.label}</span>
+      <span className="sm:hidden">{status === "resolvido" ? "Res." : status === "pendente" ? "Pend." : "Não Res."}</span>
     </span>
   );
 }

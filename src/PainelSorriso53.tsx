@@ -4,7 +4,8 @@ import PaginaPacientes from "./PaginaPacientes";
 import PaginaFavoritos from "./PaginaFavoritos";
 import PaginaAcompanhamentos from "./PaginaAcompanhamentos";
 import PaginaConfiguracoes from "./PaginaConfiguracoes";
-import PaginaLogin from "./PaginaLogin";
+import { TelaLogin, TelaRegister, TelaVerify, TelaForgot, TelaConfirmEmailChange } from "./Auth";
+import type { AuthView } from "./Auth";
 import SmileIcon from "./SmileIcon";
 
 // ── Tipos ───────────────────────────────────────────────────────────────
@@ -16,6 +17,9 @@ interface AuthUser {
   email: string;
   name: string;
   role: string;
+  unidade?: string;
+  odonto?: string;
+  equipe?: string;
 }
 
 // ── Header Premium ───────────────────────────────────────────────────────
@@ -216,7 +220,7 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-white/90">{user.name || user.email}</p>
-                <p className="text-[10px] text-white/50 font-medium">{user.role === "admin" ? "Administrador" : "Usuário"}</p>
+                <p className="text-[10px] text-white/50 font-medium">{user.role === "cap" ? "CAP" : user.role === "odonto" ? "Odonto" : "Unidade"}</p>
               </div>
               <button
                 onClick={onLogout}
@@ -280,8 +284,32 @@ export default function PainelSorriso53() {
     setPagina("resumo");
   }
 
+  // ── Auth View State ────────────────────────────────────────────────
+  const [authView, setAuthView] = useState<AuthView>(() => {
+    // Verificar se há token na URL (confirmação de email, reset de senha, etc.)
+    const hash = window.location.hash;
+    if (hash.includes("token=")) return "confirm-email";
+    return "login";
+  });
+
+  function handleAuthNavigate(view: string) {
+    setAuthView(view as AuthView);
+    window.scrollTo(0, 0);
+  }
+
   if (!user) {
-    return <PaginaLogin onLogin={handleLogin} />;
+    switch (authView) {
+      case "register":
+        return <TelaRegister onNavigate={handleAuthNavigate} />;
+      case "verify":
+        return <TelaVerify onNavigate={handleAuthNavigate} />;
+      case "forgot":
+        return <TelaForgot onNavigate={handleAuthNavigate} />;
+      case "confirm-email":
+        return <TelaConfirmEmailChange onNavigate={handleAuthNavigate} />;
+      default:
+        return <TelaLogin onLogin={handleLogin} onNavigate={handleAuthNavigate} />;
+    }
   }
 
   return (

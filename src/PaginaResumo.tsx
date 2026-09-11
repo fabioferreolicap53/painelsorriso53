@@ -7,6 +7,25 @@ import { CustomSelect } from "./CustomSelect";
 import { calcularResolucao, classificarResolucao } from "./resolucao";
 import { BarraResolucao } from "./ResolucaoUI";
 
+// ── Active Filters Bar ───────────────────────────────────────────────
+
+function ActiveFiltersBar({ filtros }: { filtros: { label: string; valor: string; cor?: string }[] }) {
+  if (filtros.length === 0) return null;
+  return (
+    <div className="bg-slate-50/80 backdrop-blur-sm border-b border-slate-100">
+      <div className="mx-auto max-w-[1380px] px-4 sm:px-6 lg:px-8 py-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
+        <svg className="h-3.5 w-3.5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+        <span className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-slate-400">Filtros:</span>
+        {filtros.map((f, i) => (
+          <span key={i} className={`inline-flex items-center gap-1 shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide ring-1 ${f.cor || "bg-cyan-50 text-cyan-700 ring-cyan-200/60"}`}>
+            {f.label}: {f.valor}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── ECharts wrapper ─────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,11 +156,14 @@ export default function PaginaResumo() {
   const [filtroTipoBuscaDraft, setFiltroTipoBuscaDraft] = useState<string>("todas");
   const [filtroTipoContatoDraft, setFiltroTipoContatoDraft] = useState<string>("todas");
   const [filtroResolucao, setFiltroResolucao] = useState<string>("todos");
+  const [filtro, setFiltro] = useState<string>("todos");
+  const [busca, setBusca] = useState("");
+  const [mostrarBusca, setMostrarBusca] = useState(false);
   const [mostrarAvancada, setMostrarAvancada] = useState(false);
 
   const filtrosAtivos = [filtroUnidade, filtroEquipe, filtroMicroarea, filtroStatus].filter(v => v !== "todas").length
     + (filtroTipoBusca !== "todas" ? 1 : 0) + (filtroTipoContato !== "todas" ? 1 : 0)
-    + (filtroResolucao !== "todos" ? 1 : 0);
+    + (filtroResolucao !== "todos" ? 1 : 0) + (filtro !== "todos" ? 1 : 0);
 
   const unidades = Array.from(new Set(pacientes.map(p => p.unidade).filter(Boolean))).sort();
   const equipes = Array.from(new Set(pacientes.map(p => p.equipe).filter(Boolean))).sort();
@@ -172,7 +194,15 @@ export default function PaginaResumo() {
     const id = calcularIdade(p.data_de_nascimento);
     return p.gestante || p.tabagista || p.tb || (id !== null && id <= 2);
   };
-  const pacientesPrioritarios = pacientes.filter(isPrioritario);
+  const pacientesPrioritarios = pacientes.filter(isPrioritario).filter((p) => {
+    if (filtro === "gestante" && !p.gestante) return false;
+    if (filtro === "crianca") { const id = calcularIdade(p.data_de_nascimento); if (!(id !== null && id <= 2)) return false; }
+    if (filtro === "tabagista" && !p.tabagista) return false;
+    if (filtro === "tb" && !p.tb) return false;
+    if (!busca.trim()) return true;
+    const q = busca.toLowerCase();
+    return (p.paciente || "").toLowerCase().includes(q) || (p.n_cns_da_pessoa_cadastrada || "").includes(q);
+  });
   const idsPrioritarios = new Set(pacientesPrioritarios.map((p) => p.id));
   const pacienteMap = new Map(pacientes.map(p => [p.id, p]));
   const acompsPrioritarios = acomps
@@ -232,7 +262,7 @@ export default function PaginaResumo() {
 
   const pizzaOption = {
     tooltip: { ...tooltipPremium, trigger: "item", formatter: "{b}<br/><span style='font-size:18px;font-weight:900'>{c}</span> <span style='color:#94a3b8'>({d}%)</span>" },
-    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 12, fontWeight: "bold" }, itemGap: 24, itemWidth: 14, itemHeight: 14, icon: "roundRect" },
+    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 10, fontWeight: "bold" }, itemGap: 16, itemWidth: 12, itemHeight: 12, icon: "roundRect" },
     animationDuration: 1200, animationEasing: "elasticOut",
     series: [{
       type: "pie", radius: ["40%", "72%"], center: ["50%", "42%"],
@@ -241,10 +271,10 @@ export default function PaginaResumo() {
       emphasis: { scale: true, scaleSize: 12, label: { show: true, fontSize: 15, fontWeight: "900", color: "#1e293b", formatter: "{b}\n{d}%" }, itemStyle: { shadowBlur: 20, shadowColor: "rgba(0,0,0,0.15)" } },
       animationType: "scale", animationDelay: (i: number) => i * 150,
       data: [
-        { value: gestantes, name: "Gestantes", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fb7185" }, { offset: 1, color: "#e11d48" }] } } },
-        { value: criancas, name: "Crianças ≤2a", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#a78bfa" }, { offset: 1, color: "#7c3aed" }] } } },
-        { value: tabagistas, name: "Tabagistas", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fbbf24" }, { offset: 1, color: "#d97706" }] } } },
-        { value: tb, name: "Tuberculose", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fb923c" }, { offset: 1, color: "#ea580c" }] } } },
+        { value: gestantes, name: "GESTANTES", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fb7185" }, { offset: 1, color: "#e11d48" }] } } },
+        { value: criancas, name: "CRIANÇAS ≤2A", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#a78bfa" }, { offset: 1, color: "#7c3aed" }] } } },
+        { value: tabagistas, name: "TABAGISTAS", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fbbf24" }, { offset: 1, color: "#d97706" }] } } },
+        { value: tb, name: "TUBERCULOSE", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fb923c" }, { offset: 1, color: "#ea580c" }] } } },
       ].filter((d) => d.value > 0),
     }],
   };
@@ -252,7 +282,7 @@ export default function PaginaResumo() {
   // ── Gráfico Donut: Situação pós-busca ───────────────────────────────
 
   const situacoes = acompsPrioritarios.reduce<Record<string, number>>((acc, a) => {
-    const s = a.situacao_pos_busca || "Não informado";
+    const s = (a.situacao_pos_busca || "Não informado").toUpperCase();
     acc[s] = (acc[s] || 0) + 1;
     return acc;
   }, {});
@@ -268,10 +298,10 @@ export default function PaginaResumo() {
 
   const donutOption = {
     tooltip: { ...tooltipPremium, trigger: "item", formatter: "{b}<br/><span style='font-size:18px;font-weight:900'>{c}</span> <span style='color:#94a3b8'>({d}%)</span>" },
-    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 11, fontWeight: "bold" }, itemGap: 18, itemWidth: 14, itemHeight: 14, icon: "roundRect" },
+    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 10, fontWeight: "bold" }, itemGap: 12, itemWidth: 12, itemHeight: 12, icon: "roundRect", formatter: (name: string) => { const map: Record<string, string> = { "ÓBITO (SITUAÇÃO ATUALIZADA NO PEP)": "ÓBITO", "MUDANÇA DE TERRITÓRIO (SITUAÇÃO ATUALIZADA NO PEP)": "MUD. TERRITÓRIO", "AGENDAMENTO APÓS CONTATO DIRETO": "AGEND. CONTATO", "CONSULTA NA ODONTO REALIZADA": "CONSULTA ODONTO", "CONVITE PARA DEMANDA LIVRE": "DEMANDA LIVRE", "NÃO LOCALIZADA": "NÃO LOCALIZ.", "REGISTRO DE ÓBITO": "REGISTRO ÓBITO", "RECAÍDA": "RECAÍDA" }; return map[name] || (name.length > 18 ? name.slice(0, 16) + "…" : name); } },
     animationDuration: 1400, animationEasing: "cubicOut",
     series: [{
-      type: "pie", radius: ["44%", "72%"], center: ["50%", "40%"],
+      type: "pie", radius: ["44%", "72%"], center: ["50%", "38%"],
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 8, borderColor: "#fff", borderWidth: 2 },
       label: { show: false },
@@ -284,27 +314,25 @@ export default function PaginaResumo() {
   // ── Gráfico Barra: Tipo de busca ────────────────────────────────────
 
   const tiposBusca = acompsPrioritarios.reduce<Record<string, number>>((acc, a) => {
-    const t = a.tipo_busca || "Não informado";
+    const t = (a.tipo_busca || "Não informado").toUpperCase();
     acc[t] = (acc[t] || 0) + 1;
     return acc;
   }, {});
 
+  const labelMapBusca: Record<string, string> = {
+    "BUSCA ATIVA - MENSAGEM REGISTRADA EM PRONTUÁRIO": "MENSAGEM",
+    "SEM BUSCA ATIVA (CONTATO OPORTUNIZADO NO ACOLHIMENTO)": "CONTATO",
+    "BUSCA ATIVA - VISITA DOMICILIAR REGISTRADA EM PRONTUÁRIO": "VISITA",
+  };
+  const tiposBuscaLabels = Object.keys(tiposBusca).map((k) => labelMapBusca[k] || k);
+
   const barraOption = {
     tooltip: { ...tooltipPremium, trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(6,182,212,0.06)" } } },
-    grid: { left: 8, right: 20, bottom: 90, top: 24, containLabel: true },
+    grid: { left: 8, right: 20, bottom: 60, top: 24, containLabel: true },
     xAxis: {
-      type: "category", data: Object.keys(tiposBusca),
+      type: "category", data: tiposBuscaLabels,
       axisLabel: {
-        color: "#64748b", fontSize: 11, fontWeight: "bold", rotate: 0, interval: 0,
-        formatter: (v: string) => {
-          const words = v.split(/\s+/);
-          if (words.length <= 3) return words.join("\n");
-          const lines: string[] = [];
-          let line = "";
-          words.forEach((w) => { if ((line + " " + w).trim().length > 16) { if (line) lines.push(line); line = w; } else { line = (line + " " + w).trim(); } });
-          if (line) lines.push(line);
-          return lines.join("\n");
-        },
+        color: "#64748b", fontSize: 10, fontWeight: "bold", rotate: 0, interval: 0,
       },
       axisLine: { lineStyle: { color: "#e2e8f0" } }, axisTick: { show: false },
     },
@@ -369,14 +397,14 @@ export default function PaginaResumo() {
   // ── Gráfico Pizza: Tipo de Contato ──────────────────────────────────
 
   const tiposContato = acompsPrioritarios.reduce<Record<string, number>>((acc, a) => {
-    const t = a.tipo_contato || "Não informado";
+    const t = (a.tipo_contato || "Não informado").toUpperCase();
     acc[t] = (acc[t] || 0) + 1;
     return acc;
   }, {});
 
   const contatoOption = {
     tooltip: { ...tooltipPremium, trigger: "item", formatter: "{b}<br/><span style='font-size:18px;font-weight:900'>{c}</span> <span style='color:#94a3b8'>({d}%)</span>" },
-    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 11, fontWeight: "bold" }, itemGap: 18, itemWidth: 12, itemHeight: 12, icon: "circle" },
+    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 10, fontWeight: "bold" }, itemGap: 16, itemWidth: 12, itemHeight: 12, icon: "circle" },
     animationDuration: 1200, animationEasing: "elasticOut",
     series: [{
       type: "pie", radius: ["35%", "65%"], center: ["50%", "42%"],
@@ -396,7 +424,7 @@ export default function PaginaResumo() {
 
   const entravesMap = acompsPrioritarios.reduce<Record<string, number>>((acc, a) => {
     if (a.entraves_identificados) {
-      a.entraves_identificados.split(/[;,]/).map((e) => e.trim()).filter(Boolean).forEach((e) => { acc[e] = (acc[e] || 0) + 1; });
+      a.entraves_identificados.split(/[;,]/).map((e) => e.trim().toUpperCase()).filter(Boolean).forEach((e) => { acc[e] = (acc[e] || 0) + 1; });
     }
     return acc;
   }, {});
@@ -428,13 +456,13 @@ export default function PaginaResumo() {
   // ── Faixas Etárias ──────────────────────────────────────────────────
 
   const faixas = [
-    { label: "0-1a", min: 0, max: 1, color: "violet" },
-    { label: "1-2a", min: 1, max: 2, color: "purple" },
-    { label: "3-5a", min: 3, max: 5, color: "blue" },
-    { label: "6-12a", min: 6, max: 12, color: "cyan" },
-    { label: "13-17a", min: 13, max: 17, color: "teal" },
-    { label: "18-39a", min: 18, max: 39, color: "green" },
-    { label: "40-59a", min: 40, max: 59, color: "amber" },
+    { label: "0-1A", min: 0, max: 1, color: "violet" },
+    { label: "1-2A", min: 1, max: 2, color: "purple" },
+    { label: "3-5A", min: 3, max: 5, color: "blue" },
+    { label: "6-12A", min: 6, max: 12, color: "cyan" },
+    { label: "13-17A", min: 13, max: 17, color: "teal" },
+    { label: "18-39A", min: 18, max: 39, color: "green" },
+    { label: "40-59A", min: 40, max: 59, color: "amber" },
     { label: "60+", min: 60, max: 999, color: "rose" },
   ];
   const faixaCounts = faixas.map((f) => ({
@@ -508,125 +536,202 @@ export default function PaginaResumo() {
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
 
         <div className="relative mx-auto flex max-w-[1380px] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-          <div className="flex flex-col gap-1 pt-1 sm:pt-0">
-              <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
-                RESUMO <span className="text-cyan-300 font-bold">GERAL</span>
-              </h1>
-            </div>
+          <div className="flex items-center gap-2.5">
+            <div className="h-6 w-0.5 rounded-full bg-gradient-to-b from-cyan-400 to-cyan-600" />
+            <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
+              RESUMO <span className="text-cyan-300 font-bold">GERAL</span>
+            </h1>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {[
-                { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-                { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-                { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
-              ].map(({ key, label, activeColor, activeBorder, icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
-                  className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
-                    filtroResolucao === key
-                      ? `${activeColor} ${activeBorder}`
-                      : "text-white/40 border-transparent hover:text-white/70"
-                  }`}
-                >
-                  {icon}
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              ))}
+          <div className="flex flex-wrap items-center gap-3">
+            {[
+              { key: "gestante", label: "Gestantes", activeColor: "text-rose-300", activeBorder: "border-rose-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg> },
+              { key: "crianca", label: "Crianças ≤2a", activeColor: "text-blue-300", activeBorder: "border-blue-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg> },
+              { key: "tabagista", label: "Tabagistas", activeColor: "text-orange-300", activeBorder: "border-orange-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" /></svg> },
+              { key: "tb", label: "TB", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg> },
+            ].map(({ key, label, activeColor, activeBorder, icon }) => (
+              <button
+                key={key}
+                onClick={() => setFiltro(filtro === key ? "todos" : key)}
+                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
+                  filtro === key
+                    ? `${activeColor} ${activeBorder}`
+                    : "text-white/40 border-transparent hover:text-white/70"
+                }`}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+            <div className="h-4 w-px bg-white/10" />
+            {[
+              { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+              { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+              { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
+            ].map(({ key, label, activeColor, activeBorder, icon }) => (
+              <button
+                key={key}
+                onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
+                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
+                  filtroResolucao === key
+                    ? `${activeColor} ${activeBorder}`
+                    : "text-white/40 border-transparent hover:text-white/70"
+                }`}
+              >
+                {icon}
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
+            <div className="h-4 w-px bg-white/10" />
+            <div className="flex items-baseline gap-2">
+              <svg className="h-4 w-4 text-amber-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+              </svg>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Total</span>
+              <span className="text-2xl font-black text-white tabular-nums leading-none">{totalPacientes.toLocaleString("pt-BR")}</span>
             </div>
-
-            <button
-              onClick={() => {
-                setMostrarAvancada(!mostrarAvancada);
-                if (!mostrarAvancada) {
-                  setFiltroUnidadeDraft(filtroUnidade);
-                  setFiltroEquipeDraft(filtroEquipe);
-                  setFiltroMicroareaDraft(filtroMicroarea);
-                  setFiltroStatusDraft(filtroStatus);
-                  setFiltroTipoBuscaDraft(filtroTipoBusca);
-                  setFiltroTipoContatoDraft(filtroTipoContato);
-                }
-              }}
-              className="relative ml-auto flex items-center gap-2 rounded-xl bg-white/[0.07] px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-white/60 ring-1 ring-white/10 transition-all duration-200 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"
-            >
-              <svg className="h-4 w-4 text-cyan-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
-              Filtros Avançados
-              {filtrosAtivos > 0 && (
-                <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[9px] font-bold text-cyan-300 ring-1 ring-cyan-400/30">
-                  {filtrosAtivos} ativo{filtrosAtivos !== 1 ? "s" : ""}
-                </span>
-              )}
-            </button>
-          <div className="flex items-baseline gap-2">
-            <svg className="h-4 w-4 text-amber-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-            </svg>
-            <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Total Pacientes</span>
-            <span className="text-2xl font-black text-white tabular-nums leading-none">{totalPacientes.toLocaleString("pt-BR")}</span>
+            <div className="hidden sm:block h-4 w-px bg-white/10" />
+            <div className="w-full sm:w-auto flex items-center gap-2 justify-center sm:justify-start">
+              <button
+                onClick={() => { setMostrarBusca(!mostrarBusca); setMostrarAvancada(false); }}
+                className={`group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarBusca ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
+              >
+                <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                <span className="hidden sm:inline">Buscar</span>
+              </button>
+              <button
+                onClick={() => {
+                  setMostrarAvancada(!mostrarAvancada);
+                  setMostrarBusca(false);
+                  if (!mostrarAvancada) {
+                    setFiltroUnidadeDraft(filtroUnidade);
+                    setFiltroEquipeDraft(filtroEquipe);
+                    setFiltroMicroareaDraft(filtroMicroarea);
+                    setFiltroStatusDraft(filtroStatus);
+                    setFiltroTipoBuscaDraft(filtroTipoBusca);
+                    setFiltroTipoContatoDraft(filtroTipoContato);
+                  }
+                }}
+                className={`group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarAvancada ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
+              >
+                <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+                <span className="hidden sm:inline">Filtros</span>
+                {filtrosAtivos > 0 && (
+                  <span className="rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/30 leading-none">
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* ── Filtros Ativos ─────────────────────────────────────── */}
+      <ActiveFiltersBar filtros={[
+        ...(filtro !== "todos" ? [{ label: "Grupo", valor: filtro, cor: "bg-rose-50 text-rose-700 ring-rose-200/60" }] : []),
+        ...(filtroUnidade !== "todas" ? [{ label: "Unidade", valor: filtroUnidade, cor: "bg-sky-50 text-sky-700 ring-sky-200/60" }] : []),
+        ...(filtroEquipe !== "todas" ? [{ label: "Equipe", valor: filtroEquipe, cor: "bg-violet-50 text-violet-700 ring-violet-200/60" }] : []),
+        ...(filtroMicroarea !== "todas" ? [{ label: "Microárea", valor: filtroMicroarea, cor: "bg-emerald-50 text-emerald-700 ring-emerald-200/60" }] : []),
+        ...(filtroStatus !== "todas" ? [{ label: "Status", valor: filtroStatus, cor: "bg-amber-50 text-amber-700 ring-amber-200/60" }] : []),
+        ...(filtroTipoBusca !== "todas" ? [{ label: "Tipo Busca", valor: filtroTipoBusca, cor: "bg-blue-50 text-blue-700 ring-blue-200/60" }] : []),
+        ...(filtroTipoContato !== "todas" ? [{ label: "Tipo Contato", valor: filtroTipoContato, cor: "bg-rose-50 text-rose-700 ring-rose-200/60" }] : []),
+        ...(filtroResolucao !== "todos" ? [{ label: "Resolução", valor: filtroResolucao.replace("_", " "), cor: "bg-orange-50 text-orange-700 ring-orange-200/60" }] : []),
+      ]} />
+
+      {/* ── Busca Rápida ────────────────────────────────────────── */}
+      {mostrarBusca && (
+        <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 px-5 sm:px-6 pb-4">
+          <div className="mx-auto max-w-[1380px]">
+            <div className="relative flex items-center">
+              <svg className="pointer-events-none absolute left-3 h-4 w-4 text-white/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar paciente..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                autoFocus
+                className="w-full rounded-lg bg-white/[0.07] border border-white/10 py-2.5 pl-10 pr-10 text-sm font-medium text-white placeholder-white/40 outline-none transition-all duration-200 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+              />
+              <button onClick={() => { setBusca(""); setMostrarBusca(false); }} className="absolute right-2 flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Filtros Avançados ────────────────────────────────────── */}
       {mostrarAvancada && (
-        <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 px-5 sm:px-6 pb-4">
+        <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 px-3 sm:px-5 md:px-6 pb-4">
           <div className="mx-auto max-w-[1380px] overflow-visible rounded-2xl bg-gradient-to-br from-white/[0.07] to-white/[0.03] ring-1 ring-white/[0.12] shadow-lg shadow-black/20 backdrop-blur-xl">
-            <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
-                  <svg className="h-3.5 w-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-3 sm:px-5 py-3">
+              <div className="flex items-center gap-2 sm:gap-2.5">
+                <div className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
+                  <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
                 </div>
-                <span className="text-sm font-bold uppercase tracking-widest text-white/60">Filtros Avançados</span>
+                <span className="text-[11px] sm:text-sm font-bold uppercase tracking-widest text-white/60">Filtros Avançados</span>
               </div>
-              <button onClick={() => setMostrarAvancada(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              <button onClick={() => setMostrarAvancada(false)} className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
+                <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
             {/* Grid de selects compacto */}
-            <div className="grid grid-cols-1 gap-3 px-5 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 px-3 sm:px-5 pt-3 sm:pt-4 md:grid-cols-2 lg:grid-cols-4">
               {/* Unidade */}
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 ring-1 ring-sky-400/20">
-                  <svg className="h-2.5 w-2.5 text-sky-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 ring-1 ring-sky-400/20">
+                    <svg className="h-2.5 w-2.5 text-sky-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Unidade</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Unidade</span>
                 <CustomSelect value={filtroUnidadeDraft} onChange={setFiltroUnidadeDraft} options={[{ value: "todas", label: "Todas" }, ...unidades.map(u => ({ value: u, label: u }))]} />
               </div>
               {/* Equipe */}
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-violet-400/10 ring-1 ring-violet-400/20">
-                  <svg className="h-2.5 w-2.5 text-violet-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-violet-400/10 ring-1 ring-violet-400/20">
+                    <svg className="h-2.5 w-2.5 text-violet-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Equipe</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Equipe</span>
                 <CustomSelect value={filtroEquipeDraft} onChange={setFiltroEquipeDraft} options={[{ value: "todas", label: "Todas" }, ...equipes.map(e => ({ value: e, label: e }))]} />
               </div>
               {/* Microárea */}
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 ring-1 ring-emerald-400/20">
-                  <svg className="h-2.5 w-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 ring-1 ring-emerald-400/20">
+                    <svg className="h-2.5 w-2.5 text-emerald-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Microárea</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Microárea</span>
                 <CustomSelect value={filtroMicroareaDraft} onChange={setFiltroMicroareaDraft} options={[{ value: "todas", label: "Todas" }, ...microareas.map(m => ({ value: m, label: m }))]} />
               </div>
               {/* Grupo (placeholder) */}
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] opacity-50">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 ring-1 ring-amber-400/20">
-                  <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] opacity-50">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 ring-1 ring-amber-400/20">
+                    <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Grupo</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Grupo</span>
                 <span className="flex-1 text-[11px] font-semibold text-white/30">—</span>
               </div>
             </div>
 
             {/* Status do Desfecho */}
-            <div className="px-5 pt-3">
-              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
+            <div className="px-3 sm:px-5 pt-1 sm:pt-3">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-5 lg:grid-cols-9">
                 <div className="col-span-full flex items-center gap-2 mb-1">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
                     <svg className="h-2.5 w-2.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">Status do Desfecho</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Status do Desfecho</span>
                 </div>
                 {[
                   { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
@@ -642,24 +747,27 @@ export default function PaginaResumo() {
                   <button
                     key={s.key}
                     onClick={() => setFiltroStatusDraft(filtroStatusDraft === s.key ? "todas" : s.key)}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                    className={`inline-flex items-center justify-center gap-1 rounded-lg sm:rounded-xl px-2 sm:px-3 py-1.5 sm:py-2 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
                       filtroStatusDraft === s.key ? s.cls : "bg-white/[0.05] text-white/50 hover:bg-white/[0.1] hover:text-white/70 ring-1 ring-white/[0.08]"
                     }`}
                   >
-                    {s.dot && <span className={`h-1.5 w-1.5 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
+                    {s.dot && <span className={`h-1 sm:h-1.5 w-1 sm:w-1.5 rounded-full ${filtroStatusDraft === s.key ? s.dot : "bg-white/20"}`} />}
                     {s.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 px-5 pt-3 sm:grid-cols-2">
+            {/* Busca Ativa */}
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 px-3 sm:px-5 pt-1 sm:pt-3 md:grid-cols-2">
               {/* Tipo de Busca */}
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-teal-400/10 ring-1 ring-teal-400/20">
-                  <svg className="h-2.5 w-2.5 text-teal-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-teal-400/10 ring-1 ring-teal-400/20">
+                    <svg className="h-2.5 w-2.5 text-teal-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Tipo Busca</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Tipo Busca</span>
                 <CustomSelect value={filtroTipoBuscaDraft} onChange={setFiltroTipoBuscaDraft} options={[
                   { value: "todas", label: "Todas" },
                   { value: "BUSCA ATIVA - VISITA DOMICILIAR REGISTRADA EM PRONTUÁRIO", label: "Visita Domiciliar" },
@@ -668,11 +776,13 @@ export default function PaginaResumo() {
                 ]} />
               </div>
               {/* Tipo de Contato */}
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-400/10 ring-1 ring-rose-400/20">
-                  <svg className="h-2.5 w-2.5 text-rose-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-rose-400/10 ring-1 ring-rose-400/20">
+                    <svg className="h-2.5 w-2.5 text-rose-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Tipo Contato</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 shrink-0">Tipo Contato</span>
                 <CustomSelect value={filtroTipoContatoDraft} onChange={setFiltroTipoContatoDraft} options={[
                   { value: "todas", label: "Todas" },
                   { value: "CONTATO DIRETO (CONVERSA)", label: "Contato Direto" },
@@ -683,7 +793,7 @@ export default function PaginaResumo() {
             </div>
 
             {/* Ações compactas */}
-            <div className="flex items-center justify-end gap-2 px-5 pb-3 pt-3">
+            <div className="flex items-center justify-end gap-2 px-3 sm:px-5 pb-3 sm:pb-4 pt-2 sm:pt-3 mt-2 sm:mt-3 border-t border-white/[0.06]">
               <button
                 onClick={() => {
                   setFiltroUnidadeDraft("todas"); setFiltroUnidade("todas");
@@ -695,7 +805,7 @@ export default function PaginaResumo() {
                   setFiltroResolucao("todos");
                   setMostrarAvancada(false);
                 }}
-                className="rounded-xl border border-white/10 bg-white/[0.07] px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
+                className="rounded-lg sm:rounded-xl border border-white/10 bg-white/[0.07] px-3 sm:px-5 py-1.5 sm:py-2.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
               >
                 Limpar
               </button>
@@ -709,7 +819,7 @@ export default function PaginaResumo() {
                   setFiltroTipoContato(filtroTipoContatoDraft);
                   setMostrarAvancada(false);
                 }}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider text-white shadow-lg shadow-cyan-500/30 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl active:scale-[0.97]"
+                className="flex items-center gap-1.5 sm:gap-2 rounded-lg sm:rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 px-3 sm:px-5 py-1.5 sm:py-2.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-white shadow-lg shadow-cyan-500/30 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl active:scale-[0.97]"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
                 Aplicar
@@ -772,7 +882,7 @@ export default function PaginaResumo() {
             </div>
           </ChartCard>
           <ChartCard titulo="Situação Pós-Busca" subtitulo="Resultado dos acompanhamentos">
-            <div className="h-[380px]">
+            <div className="h-[420px]">
               <Chart option={donutOption} className="h-full w-full" />
             </div>
           </ChartCard>
@@ -781,7 +891,7 @@ export default function PaginaResumo() {
         {/* ── Gráficos Linha 2 ─────────────────────────────────────── */}
         <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
           <ChartCard titulo="Tipos de Busca" subtitulo="Volume por modalidade" icone={I.busca}>
-            <div className="h-[350px]">
+            <div className="h-[380px]">
               <Chart option={barraOption} className="h-full w-full" />
             </div>
           </ChartCard>
