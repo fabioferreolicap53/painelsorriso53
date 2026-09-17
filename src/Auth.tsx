@@ -327,7 +327,7 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
 
       // Enviar email de verificação
       try {
-        await fetch(pb("confirm-verification"), {
+        await fetch(pb("request-verification"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: email.trim() }),
