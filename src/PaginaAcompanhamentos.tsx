@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Acompanhamento, Paciente } from "./types";
-import { buscarTodosAcompanhamentos, buscarAcompanhamentos, buscarPacientes, excluirAcompanhamento } from "./pocketbase";
+import { buscarTodosAcompanhamentos, buscarAcompanhamentos, buscarPacientes, excluirAcompanhamento, buildFiltroRole } from "./pocketbase";
 import { getCoresCategoria } from "./data";
 import { CustomSelect } from "./CustomSelect";
 import ModalAcompanhamento from "./ModalAcompanhamento";
@@ -48,18 +48,16 @@ function calcularIdade(dataNascimento: string): number | null {
 }
 
 function renderGrupos(p: Paciente) {
-  const idade = calcularIdade(p.data_de_nascimento);
-  const isCrianca = idade !== null && idade <= 2;
   const itens: { label: string; className: string }[] = [];
   if (p.gestante) itens.push({ label: "Gestante", className: getCoresCategoria("gestante") });
   if (p.tb) itens.push({ label: "TB", className: getCoresCategoria("tuberculose") });
   if (p.tabagista) itens.push({ label: "Tabagista", className: getCoresCategoria("tabagista") });
-  if (isCrianca) itens.push({ label: "≤2a", className: getCoresCategoria("crianca") });
+  if (p.menor_de_2_anos) itens.push({ label: "≤2a", className: getCoresCategoria("crianca") });
   if (itens.length === 0) return null;
   return (
     <div className="flex flex-wrap justify-center gap-1">
       {itens.map((item) => (
-        <span key={item.label} className={`inline-flex items-center rounded-full px-2 py-[1px] text-[8px] font-bold uppercase tracking-wider ${item.className}`}>
+        <span key={item.label} className={`inline-flex items-center rounded-full px-2.5 py-[1px] text-[9px] font-bold uppercase tracking-wider ${item.className}`}>
           {item.label}
         </span>
       ))}
@@ -95,8 +93,10 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
     + (filtroTipoBusca !== "todas" ? 1 : 0) + (filtroTipoContato !== "todas" ? 1 : 0)
     + (filtroResolucao !== "todos" ? 1 : 0);
   const unidades = [...new Set(Object.values(pacMap).map(p => p.unidade).filter(Boolean))].sort();
-  const equipes = [...new Set(Object.values(pacMap).map(p => p.equipe).filter(Boolean))].sort();
-  const microareas = [...new Set(Object.values(pacMap).map(p => p.microarea).filter(Boolean))].sort();
+  const pacsParaEquipes = filtroUnidadeDraft !== "todas" ? Object.values(pacMap).filter(p => p.unidade === filtroUnidadeDraft) : Object.values(pacMap);
+  const equipes = [...new Set(pacsParaEquipes.map(p => p.equipe).filter(Boolean))].sort();
+  const pacsParaMicro = pacsParaEquipes.filter(p => filtroEquipeDraft === "todas" || p.equipe === filtroEquipeDraft);
+  const microareas = [...new Set(pacsParaMicro.map(p => p.microarea).filter(Boolean))].sort();
   const [excluindo, setExcluindo] = useState<string | null>(null);
   const [toast, setToast] = useState<{ tipo: "ok" | "erro"; msg: string } | null>(null);
 
@@ -125,16 +125,22 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
     let cancel = false;
     async function carregar() {
       try {
-        const pacsPromise = buscarPacientes({ perPage: 500 });
+        const filtroRole = buildFiltroRole();
+        const pacsPromise = buscarPacientes({ perPage: 500, filter: filtroRole ?? undefined });
         const acompsPromise = selectedPacienteId
           ? buscarAcompanhamentos(selectedPacienteId)
           : buscarTodosAcompanhamentos();
         const [acomps, pacs] = await Promise.all([acompsPromise, pacsPromise]);
         if (cancel) return;
-        setAcompanhamentos(acomps);
         const map: Record<string, Paciente> = {};
+        const pacsPermitidos = new Set(pacs.items.map((p) => p.id));
         pacs.items.forEach((p) => { map[p.id] = p; });
         setPacMap(map);
+        // Filtrar acompanhamentos apenas dos pacientes permitidos pelo perfil
+        const acompsFiltrados = selectedPacienteId
+          ? acomps
+          : acomps.filter((a) => pacsPermitidos.has(a.paciente_id));
+        setAcompanhamentos(acompsFiltrados);
       } catch { /* ignore */ }
       finally { if (!cancel) setCarregando(false); }
     }
@@ -195,10 +201,7 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
         const pac = pacMap[a.paciente_id];
         if (!pac) return false;
         if (filtro === "gestante") return pac.gestante === true;
-        if (filtro === "crianca") {
-          const idade = calcularIdade(pac.data_de_nascimento);
-          return idade !== null && idade <= 2;
-        }
+        if (filtro === "crianca") return pac.menor_de_2_anos === true;
         if (filtro === "tb") return pac.tb === true;
         if (filtro === "tabagista") return pac.tabagista === true;
         return true;
@@ -268,92 +271,109 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
         <div className="relative mx-auto flex max-w-[1380px] flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2.5">
             <div className="h-6 w-0.5 rounded-full bg-gradient-to-b from-cyan-400 to-cyan-600" />
-            <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl">
-              ACOMPANHAMENTOS <span className="text-cyan-300 font-bold">Registrados</span>
+            <h1 className="text-xl font-black tracking-tight text-white sm:text-2xl whitespace-nowrap">
+              ACOMP.<br/><span className="text-cyan-300 font-bold">Registrados</span>
             </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {[
-              { key: "gestante", label: "Gestantes", activeColor: "text-rose-300", activeBorder: "border-rose-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg> },
-              { key: "crianca", label: "Crianças ≤2a", activeColor: "text-blue-300", activeBorder: "border-blue-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg> },
-              { key: "tabagista", label: "Tabagistas", activeColor: "text-orange-300", activeBorder: "border-orange-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" /></svg> },
-              { key: "tb", label: "TB", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg> },
-            ].map(({ key, label, activeColor, activeBorder, icon }) => (
-              <button
-                key={key}
-                onClick={() => setFiltro(filtro === key ? "todos" : key)}
-                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
-                  filtro === key
-                    ? `${activeColor} ${activeBorder}`
-                    : "text-white/40 border-transparent hover:text-white/70"
-                }`}
-              >
-                {icon}
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-            <div className="h-4 w-px bg-white/10" />
-            {[
-              { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-              { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-              { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
-            ].map(({ key, label, activeColor, activeBorder, icon }) => (
-              <button
-                key={key}
-                onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
-                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
-                  filtroResolucao === key
-                    ? `${activeColor} ${activeBorder}`
-                    : "text-white/40 border-transparent hover:text-white/70"
-                }`}
-              >
-                {icon}
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-            <div className="h-4 w-px bg-white/10" />
-            <div className="flex items-baseline gap-2">
-              <svg className="h-4 w-4 text-emerald-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-              </svg>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Registros</span>
-              <span className="text-2xl font-black text-white tabular-nums leading-none">
-                {carregando ? "\u2026" : filtradosComGrupo.length.toLocaleString("pt-BR")}
-              </span>
+
+          <div className="flex flex-wrap items-center gap-2 sm:gap-5 w-full">
+            {/* Coluna: Grupos Prioritários */}
+            <div className="hidden sm:flex flex-col items-center gap-1">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-cyan-300/50">GRUPOS PRIORITÁRIOS</span>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                {[
+                  { key: "gestante", label: "Gestantes", activeColor: "text-rose-300", activeBorder: "border-rose-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg> },
+                  { key: "crianca", label: "Crianças ≤2a", activeColor: "text-blue-300", activeBorder: "border-blue-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg> },
+                  { key: "tabagista", label: "Tabagistas", activeColor: "text-orange-300", activeBorder: "border-orange-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" /></svg> },
+                  { key: "tb", label: "TB", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg> },
+                ].map(({ key, label, activeColor, activeBorder, icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltro(filtro === key ? "todos" : key)}
+                    className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-3 py-1 sm:py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ring-1 ${
+                      filtro === key
+                        ? `${activeColor} ${activeBorder.replace("border-", "ring-")} bg-white/[0.08] ring-current/30`
+                        : "text-white/40 ring-white/10 hover:text-white/70 hover:ring-white/20"
+                    }`}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="hidden sm:block h-4 w-px bg-white/10" />
-            <div className="w-full sm:w-auto flex items-center gap-2 justify-center sm:justify-start">
-              <button
-                onClick={() => { setMostrarBusca(!mostrarBusca); setMostrarAvancada(false); }}
-                className={`group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarBusca ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
-              >
-                <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-                <span className="hidden sm:inline">Buscar</span>
-              </button>
-              <button
-                onClick={() => {
-                  setMostrarAvancada(!mostrarAvancada);
-                  setMostrarBusca(false);
-                  if (!mostrarAvancada) {
-                    setFiltroUnidadeDraft(filtroUnidade);
-                    setFiltroEquipeDraft(filtroEquipe);
-                    setFiltroMicroareaDraft(filtroMicroarea);
-                    setFiltroStatusDraft(filtroStatus);
-                    setFiltroGrupoDraft(filtro);
-                    setFiltroTipoBuscaDraft(filtroTipoBusca);
-                    setFiltroTipoContatoDraft(filtroTipoContato);
-                  }
-                }}
-                className={`group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarAvancada ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
-              >
-                <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
-                <span className="hidden sm:inline">Filtros</span>
-                {filtrosAtivos > 0 && (
-                  <span className="rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/30 leading-none">
-                    {filtrosAtivos}
-                  </span>
-                )}
-              </button>
+
+            <div className="hidden sm:block h-12 w-px bg-white/10" />
+
+            {/* Coluna: Resolução dos Acompanhamentos */}
+            <div className="hidden sm:flex flex-col items-center gap-1">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-cyan-300/50">RESOLUÇÃO DOS ACOMPANHAMENTOS</span>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                {[
+                  { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                  { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                  { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
+                ].map(({ key, label, activeColor, activeBorder, icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
+                    className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-3 py-1 sm:py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ring-1 ${
+                      filtroResolucao === key
+                        ? `${activeColor} ${activeBorder.replace("border-", "ring-")} bg-white/[0.08] ring-current/30`
+                        : "text-white/40 ring-white/10 hover:text-white/70 hover:ring-white/20"
+                    }`}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Total + Buscar + Filtros */}
+            <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto">
+              <div className="flex items-baseline gap-2">
+                <svg className="h-4 w-4 text-emerald-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Registros</span>
+                <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-none">
+                  {carregando ? "\u2026" : filtradosComGrupo.length.toLocaleString("pt-BR")}
+                </span>
+              </div>
+              <div className="h-4 w-px bg-white/10" />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setMostrarBusca(!mostrarBusca); setMostrarAvancada(false); }}
+                  className={`group relative flex items-center gap-2 rounded-xl px-2.5 sm:px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarBusca ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                  <span className="hidden sm:inline">Buscar</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setMostrarAvancada(!mostrarAvancada);
+                    setMostrarBusca(false);
+                    if (!mostrarAvancada) {
+                      setFiltroUnidadeDraft(filtroUnidade);
+                      setFiltroEquipeDraft(filtroEquipe);
+                      setFiltroMicroareaDraft(filtroMicroarea);
+                      setFiltroStatusDraft(filtroStatus);
+                      setFiltroGrupoDraft(filtro);
+                      setFiltroTipoBuscaDraft(filtroTipoBusca);
+                      setFiltroTipoContatoDraft(filtroTipoContato);
+                    }
+                  }}
+                  className={`group relative flex items-center gap-2 rounded-xl px-2.5 sm:px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarAvancada ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+                  {filtrosAtivos > 0 && (
+                    <span className="rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/30 leading-none">
+                      {filtrosAtivos}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -454,10 +474,11 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
               </div>
             </div>
 
-            {/* Status do Desfecho */}
+            <div className="h-px bg-white/[0.06] mx-3 sm:mx-5" />
+            {/* Status */}
             <div className="mx-3 sm:mx-5 mb-3 sm:mb-4 mt-2 sm:mt-3 rounded-xl bg-white/[0.05] px-3 sm:px-5 py-2.5 sm:py-3 ring-1 ring-white/[0.08]">
               <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Status do Desfecho</span>
+                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Status</span>
               </div>
               <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-5 lg:grid-cols-9">
               {[
@@ -485,7 +506,8 @@ export default function PaginaAcompanhamentos({ selectedPacienteId }: { selected
               </div>
             </div>
 
-            {/* Busca Ativa */}
+            <div className="h-px bg-white/[0.06] mx-3 sm:mx-5" />
+            {/* Busca */}
             <div className="grid grid-cols-1 gap-2 sm:gap-3 px-3 sm:px-5 pt-1 sm:pt-3 md:grid-cols-2">
               {/* Tipo de Busca */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">

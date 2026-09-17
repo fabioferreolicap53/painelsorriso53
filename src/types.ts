@@ -6,12 +6,9 @@
 /** Campos booleanos — indicadores de condição do paciente */
 export interface IndicadoresPaciente {
   gestante: boolean;
-  has: boolean;       // hipertensao arterial sistemica
-  dm: boolean;        // diabetes mellitus
-  hiv: boolean;
   tb: boolean;        // tuberculose
   tabagista: boolean;
-  familia_recebe_bf: boolean; // bolsa familia
+  menor_de_2_anos: boolean;
 }
 
 /** Registro completo da collection painelsorriso53_pacientes */
@@ -22,17 +19,13 @@ export interface Paciente {
   microarea: string;
   paciente: string;          // nome do paciente
   n_pront: string;           // numero do prontuario
-  data_de_nascimento: string; // data de nascimento (YYYY-MM-DD)
-  n_cns_da_pessoa_cadastrada: string; // CNS da pessoa
   gestante: boolean;
-  has: boolean;
-  dm: boolean;
-  hiv: boolean;
   tb: boolean;
   tabagista: boolean;
-  familia_recebe_bf: boolean;
-  data_ultima_cons_oriclista: string; // data ultima consulta oriclista
-  data_ultima_cons_dentista: string;  // data ultima consulta dentista
+  menor_de_2_anos: boolean;
+  data_de_nascimento: string; // data de nascimento (DD/MM/YYYY)
+  n_cns_da_pessoa_cadastrada: string; // CNS da pessoa
+  idade: string;              // idade do paciente
   collectionId?: string;
   collectionName?: string;
   created?: string;

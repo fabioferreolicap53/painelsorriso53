@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import SmileIcon from "./SmileIcon";
 
 const PB_URL = import.meta.env.VITE_POCKETBASE_URL as string;
@@ -100,7 +100,7 @@ function SuccessMsg({ msg }: { msg: string }) {
 // ── Login ──────────────────────────────────────────────────────────────
 
 interface LoginProps {
-  onLogin: (token: string, record: { id: string; email: string; name: string; role: string; unidade?: string; odonto?: string; equipe?: string }) => void;
+  onLogin: (token: string, record: { id: string; email: string; name: string; role: string; unidade?: string; equipe?: string; favoritos?: string[] }) => void;
   onNavigate: (view: string) => void;
 }
 
@@ -125,6 +125,10 @@ export function TelaLogin({ onLogin, onNavigate }: LoginProps) {
       });
       const data = await resp.json();
       if (!resp.ok || !data.token) { setError("Email ou senha incorretos"); return; }
+      if (data.record && (data.record.verified === false || data.record.verified === 0)) {
+        setError("Email não confirmado. Verifique sua caixa de entrada.");
+        return;
+      }
       try { localStorage.setItem("pb_auth_token", data.token); } catch { /* */ }
       onLogin(data.token, {
         id: data.record.id,
@@ -132,7 +136,6 @@ export function TelaLogin({ onLogin, onNavigate }: LoginProps) {
         name: data.record.name ?? "",
         role: data.record.role ?? "unidade",
         unidade: data.record.unidade ?? "",
-        odonto: data.record.odonto ?? "",
         equipe: data.record.equipe ?? "",
       });
     } catch {
@@ -215,7 +218,73 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const equipesDisponiveis = unidade ? (UNIDADES_EQUIPES[unidade] || []) : [];
+  // ── Dados de usuários existentes ────────────────────────────────────
+  const [usuariosExistentes, setUsuariosExistentes] = useState<{ role: string; unidade: string; equipe: string }[]>([]);
+  const [carregandoVagas, setCarregandoVagas] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const url = `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_USERS}/records?perPage=500&fields=role,unidade,equipe`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (data.items) setUsuariosExistentes(data.items);
+      } catch { /* ignora — sem dados = tudo liberado */ }
+      setCarregandoVagas(false);
+    })();
+  }, []);
+
+  // ── Análise de vagas ────────────────────────────────────────────────
+  const unidadesOcupadas = useMemo(() => {
+    const map: Record<string, number> = {};
+    usuariosExistentes.forEach((u) => {
+      if ((u.role === "unidade" || u.role === "cap") && u.unidade) {
+        map[u.unidade] = (map[u.unidade] || 0) + 1;
+      }
+    });
+    return map;
+  }, [usuariosExistentes]);
+
+  const capExiste = useMemo(() => usuariosExistentes.some((u) => u.role === "cap"), [usuariosExistentes]);
+
+  const equipesVinculadasPorUnidade = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    usuariosExistentes.forEach((u) => {
+      if (u.role === "odonto" && u.unidade && u.equipe) {
+        const eqs = u.equipe.split(",").map((s) => s.trim()).filter(Boolean);
+        if (!map[u.unidade]) map[u.unidade] = [];
+        map[u.unidade].push(...eqs);
+      }
+    });
+    return map;
+  }, [usuariosExistentes]);
+
+  // ── Listas filtradas ────────────────────────────────────────────────
+  const unidadesDisponiveis = useMemo(() => {
+    return UNIDADES.map((u) => ({
+      nome: u,
+      vagas: role === "cap" ? (capExiste ? 0 : 1) : (unidadesOcupadas[u] ?? 0),
+      disponivel: role === "cap" ? !capExiste : !(unidadesOcupadas[u] > 0),
+    }));
+  }, [role, capExiste, unidadesOcupadas]);
+
+  const equipesDisponiveis = useMemo(() => {
+    if (!unidade) return [];
+    const todas = UNIDADES_EQUIPES[unidade] || [];
+    const vinculadas = equipesVinculadasPorUnidade[unidade] || [];
+    return todas.map((eq) => ({
+      nome: eq,
+      vinculada: vinculadas.includes(eq),
+    }));
+  }, [unidade, equipesVinculadasPorUnidade]);
+
+  const equipesFiltradas = unidade ? (UNIDADES_EQUIPES[unidade] || []) : [];
+  const equipesNaoVinculadas = unidade ? equipesDisponiveis.filter((e) => !e.vinculada).map((e) => e.nome) : [];
+
+  // ── Reset ao trocar unidade ─────────────────────────────────────────
+  useEffect(() => {
+    setEquipes([]);
+  }, [unidade]);
 
   function toggleEquipe(eq: string) {
     setEquipes((prev) => prev.includes(eq) ? prev.filter((e) => e !== eq) : [...prev, eq]);
@@ -229,6 +298,9 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
     if (password !== confirmPassword) { setError("As senhas não conferem"); return; }
     if (role === "unidade" && !unidade) { setError("Selecione a unidade"); return; }
     if (role === "odonto" && !unidade) { setError("Selecione a unidade"); return; }
+    if (role === "unidade" && unidadesOcupadas[unidade] > 0) { setError("Esta unidade já possui cadastro ativo"); return; }
+    if (role === "cap" && capExiste) { setError("Já existe um cadastro CAP ativo"); return; }
+    if (role === "odonto" && equipes.length === 0) { setError("Selecione pelo menos uma equipe"); return; }
 
     setLoading(true);
     try {
@@ -238,7 +310,6 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
         passwordConfirm: confirmPassword,
         role,
         unidade: (role === "unidade" || role === "odonto") ? unidade : "",
-        odonto: role === "odonto" ? unidade : "",
         equipe: role === "odonto" ? equipes.join(", ") : "",
       };
 
@@ -290,19 +361,41 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
           <label className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Perfil de acesso</label>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {([
-              { value: "unidade" as const, label: "Unidade", mobile: "Unidade", desc: "Acomp. da unidade" },
-              { value: "odonto" as const, label: "Odonto", mobile: "Odonto", desc: "Equipes vinculadas" },
-              { value: "cap" as const, label: "CAP", mobile: "CAP", desc: "Todos os registros" },
-            ]).map((r) => (
-              <button key={r.value} type="button" onClick={() => { setRole(r.value); setUnidade(""); setEquipes([]); setShowEquipes(r.value === "odonto"); }}
-                className={`rounded-xl border-2 px-2.5 py-3 sm:px-3 text-center transition-all duration-200 ${
-                  role === r.value ? "border-blue-400 bg-blue-50 ring-4 ring-blue-500/5" : "border-slate-100 bg-slate-50 hover:border-slate-200"
-                }`}>
-                <span className={`block text-[11px] sm:text-xs font-black uppercase leading-tight ${role === r.value ? "text-blue-600" : "text-slate-500"}`}>{r.label}</span>
-                <span className="mt-1 block text-[8px] sm:text-[9px] font-semibold text-slate-400 leading-tight">{r.desc}</span>
-              </button>
-            ))}
+              { value: "unidade" as const, label: "Unidade", desc: "Acomp. da unidade", badge: capExiste ? null : "1 vaga" },
+              { value: "odonto" as const, label: "Odonto", desc: "Equipes vinculadas", badge: null },
+              { value: "cap" as const, label: "CAP", desc: "Todos os registros", badge: capExiste ? "Ocupado" : "1 vaga" },
+            ]).map((r) => {
+              const bloqueado = (r.value === "cap" && capExiste) || carregandoVagas;
+              return (
+                <button key={r.value} type="button"
+                  disabled={bloqueado}
+                  onClick={() => { setRole(r.value); setUnidade(""); setEquipes([]); setShowEquipes(r.value === "odonto"); }}
+                  className={`relative rounded-xl border-2 px-2.5 py-3 sm:px-3 text-center transition-all duration-200 ${
+                    bloqueado
+                      ? "cursor-not-allowed border-slate-100 bg-slate-50/50 opacity-50"
+                      : role === r.value
+                        ? "border-blue-400 bg-blue-50 ring-4 ring-blue-500/5"
+                        : "border-slate-100 bg-slate-50 hover:border-slate-200"
+                  }`}>
+                  <span className={`block text-[11px] sm:text-xs font-black uppercase leading-tight ${role === r.value ? "text-blue-600" : bloqueado ? "text-slate-300" : "text-slate-500"}`}>{r.label}</span>
+                  <span className={`mt-1 block text-[8px] sm:text-[9px] font-semibold leading-tight ${bloqueado ? "text-slate-300" : "text-slate-400"}`}>{r.desc}</span>
+                  {r.badge && (
+                    <span className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[7px] font-black uppercase tracking-wider ${
+                      r.badge === "Ocupado" ? "bg-rose-100 text-rose-500" : "bg-emerald-100 text-emerald-600"
+                    }`}>{r.badge}</span>
+                  )}
+                  {bloqueado && r.value === "cap" && (
+                    <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 shadow-sm">
+                      <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </div>
+          {carregandoVagas && (
+            <p className="mt-2 text-center text-[9px] font-bold text-slate-300 uppercase tracking-wider">Verificando vagas disponíveis...</p>
+          )}
         </div>
 
         {/* Unidade - aparece para unidade e odonto */}
@@ -313,40 +406,80 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">{iconBuilding}</span>
               <select value={unidade} onChange={(e) => { setUnidade(e.target.value); setEquipes([]); }}
                 className="w-full appearance-none rounded-2xl border-2 border-slate-100 bg-slate-50 py-3.5 pl-12 pr-10 text-sm font-medium text-slate-900 outline-none transition-all focus:border-blue-400/50 focus:bg-white focus:ring-4 focus:ring-blue-500/5">
-                <option value="">Selecione...</option>
-                {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
+                <option value="">Selecione a unidade...</option>
+                {unidadesDisponiveis.map((u) => (
+                  <option key={u.nome} value={u.nome} disabled={!u.disponivel}>
+                    {u.nome} {u.disponivel ? "" : "— indisponível"}
+                  </option>
+                ))}
               </select>
               <svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
             </div>
+            {unidade && role === "unidade" && unidadesOcupadas[unidade] > 0 && (
+              <p className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-rose-500">
+                <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
+                Esta unidade já possui um cadastro ativo. Não é possível criar outro.
+              </p>
+            )}
+            {unidade && role === "odonto" && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-blue-50/80 px-3 py-2 ring-1 ring-blue-100">
+                <svg className="h-4 w-4 shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" /></svg>
+                <span className="text-[10px] font-bold text-blue-600">
+                  {equipesVinculadasPorUnidade[unidade]?.length || 0} equipe(s) já vinculada(s) — apenas equipes restantes disponíveis
+                </span>
+              </div>
+            )}
           </div>
         )}
 
         {/* Equipes vinculadas - aparece para odonto com unidade selecionada */}
-        {role === "odonto" && unidade && equipesDisponiveis.length > 0 && (
+        {role === "odonto" && unidade && equipesFiltradas.length > 0 && (
           <div>
             <button type="button" onClick={() => setShowEquipes(!showEquipes)}
               className="mb-2 flex w-full items-center justify-between rounded-xl border-2 border-slate-100 bg-slate-50 px-4 py-3 transition-all hover:border-slate-200">
               <div className="text-left">
                 <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Equipes Vinculadas</span>
-                <span className="block text-xs font-bold text-slate-600">{equipes.length > 0 ? `${equipes.length} selecionada(s)` : "Nenhuma selecionada"}</span>
+                <span className="block text-xs font-bold text-slate-600">
+                  {equipes.length > 0 ? `${equipes.length} selecionada(s)` : "Nenhuma selecionada"}
+                  <span className="ml-1 text-[9px] font-semibold text-slate-400">
+                    · {equipesNaoVinculadas.length} disponível(is)
+                  </span>
+                </span>
               </div>
               <svg className={`h-4 w-4 text-slate-400 transition-transform ${showEquipes ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
             </button>
             {showEquipes && (
-              <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-100 bg-white p-2 space-y-1">
-                {equipesDisponiveis.map((eq) => (
-                  <button key={eq} type="button" onClick={() => toggleEquipe(eq)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition-all ${
-                      equipes.includes(eq) ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200" : "text-slate-600 hover:bg-slate-50"
-                    }`}>
-                    <span className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-all ${
-                      equipes.includes(eq) ? "border-blue-500 bg-blue-500" : "border-slate-200"
-                    }`}>
-                      {equipes.includes(eq) && <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
-                    </span>
-                    {eq}
-                  </button>
-                ))}
+              <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-100 bg-white p-2 space-y-1">
+                {equipesDisponiveis.map((eq) => {
+                  const indisponivel = eq.vinculada;
+                  const selecionada = equipes.includes(eq.nome);
+                  return (
+                    <button key={eq.nome} type="button"
+                      disabled={indisponivel}
+                      onClick={() => { if (!indisponivel) toggleEquipe(eq.nome); }}
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition-all ${
+                        indisponivel
+                          ? "cursor-not-allowed bg-slate-50/60 opacity-40"
+                          : selecionada
+                            ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
+                            : "text-slate-600 hover:bg-slate-50"
+                      }`}>
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-all ${
+                        selecionada ? "border-blue-500 bg-blue-500" : indisponivel ? "border-slate-200 bg-slate-100" : "border-slate-200"
+                      }`}>
+                        {selecionada && <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>}
+                        {indisponivel && <svg className="h-2.5 w-2.5 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>}
+                      </span>
+                      <span className="flex-1">
+                        {eq.nome}
+                        {indisponivel && <span className="ml-1.5 text-[8px] font-bold uppercase text-rose-400">vinculada</span>}
+                      </span>
+                      {indisponivel && (
+                        <svg className="h-3.5 w-3.5 shrink-0 text-slate-300" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -443,32 +576,159 @@ export function TelaForgot({ onNavigate }: { onNavigate: (v: string) => void }) 
   );
 }
 
-// ── Confirmar Troca de Email ───────────────────────────────────────────
+// ── Página de Ação de E-mail (Reset + Troca) ──────────────────────────
 
-export function TelaConfirmEmailChange({ onNavigate }: { onNavigate: (v: string) => void }) {
+export type EmailAction = "reset_password" | "confirm_email_change";
+
+interface EmailActionPageProps {
+  token: string;
+  action: EmailAction;
+  onNavigate: (v: string) => void;
+}
+
+export function EmailActionPage({ token, action, onNavigate }: EmailActionPageProps) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const isReset = action === "reset_password";
+  const title = isReset ? "Redefinir Senha" : "Confirmar Troca de E-mail";
+  const description = isReset
+    ? "Crie uma nova senha para sua conta."
+    : "Digite sua senha atual para confirmar a alteração do e-mail.";
+  const submitLabel = isReset ? "Redefinir Senha" : "Confirmar Troca";
+  const successMsg = isReset ? "Senha redefinida com sucesso!" : "E-mail alterado com sucesso!";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    if (isReset) {
+      if (password.length < 8) { setError("Senha deve ter no mínimo 8 caracteres"); return; }
+      if (password !== confirmPassword) { setError("As senhas não conferem"); return; }
+    } else {
+      if (!password.trim()) { setError("Digite sua senha atual"); return; }
+    }
+
+    setLoading(true);
+    try {
+      const endpoint = isReset ? "confirm-password-reset" : "confirm-email-change";
+      const body = isReset
+        ? { token, password, passwordConfirm: confirmPassword }
+        : { token, password };
+
+      const resp = await fetch(pb(endpoint), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        const msg = (data.message || "").toLowerCase();
+        if (msg.includes("expired") || msg.includes("expirado")) {
+          setError("Link expirado. Solicite um novo link.");
+        } else if (msg.includes("invalid") || msg.includes("inválido") || msg.includes("invalido")) {
+          setError(isReset ? "Token inválido. Solicite um novo link." : "Senha incorreta.");
+        } else {
+          setError(data.message || "Erro ao processar solicitação");
+        }
+        return;
+      }
+      setSuccess(true);
+    } catch {
+      setError("Erro ao conectar ao servidor");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <AuthCard>
       <Logo />
       <div className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-          <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+        <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${isReset ? "bg-amber-100" : "bg-blue-100"}`}>
+          {isReset
+            ? <svg className="h-8 w-8 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+            : <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+          }
         </div>
-        <h2 className="text-lg font-black text-slate-900">Confirmar Troca de E-mail</h2>
-        <p className="mt-3 text-sm text-slate-500">Clique no botão abaixo para confirmar a alteração do seu endereço de e-mail.</p>
-        {!success ? (
-          <button onClick={() => setSuccess(true)} className="mt-6 w-full rounded-2xl bg-blue-600 py-3 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98]">
-            Confirmar Troca
+        <h2 className="text-lg font-black text-slate-900">{title}</h2>
+        <p className="mt-3 text-sm text-slate-500">{description}</p>
+      </div>
+
+      {!success ? (
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <InputField
+            label={isReset ? "Nova senha (mín. 8 caracteres)" : "Senha atual"}
+            type="password"
+            placeholder="••••••••"
+            autoFocus
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(""); }}
+            icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>}
+          />
+          {isReset && (
+            <InputField
+              label="Confirmar nova senha"
+              type="password"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); setError(""); }}
+              icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>}
+            />
+          )}
+          <ErrorMsg msg={error} />
+          <button type="submit" disabled={loading} className="w-full rounded-2xl bg-blue-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+            {loading ? <span className="inline-flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Processando...</span> : submitLabel}
           </button>
-        ) : (
-          <div className="mt-6">
-            <SuccessMsg msg="E-mail alterado com sucesso!" />
-            <button onClick={() => onNavigate("login")} className="mt-4 w-full rounded-2xl bg-slate-900 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 active:scale-[0.98]">
-              Voltar ao Login
-            </button>
+        </form>
+      ) : (
+        <div className="mt-6 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+            <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
           </div>
+          <SuccessMsg msg={successMsg} />
+          <button onClick={() => onNavigate("login")} className="mt-4 w-full rounded-2xl bg-slate-900 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 active:scale-[0.98]">
+            Voltar ao Login
+          </button>
+        </div>
+      )}
+    </AuthCard>
+  );
+}
+
+// ── Resultado da Verificação de Email ─────────────────────────────────
+
+export function TelaVerificacaoResultado({ tipo, onNavigate }: { tipo: "sucesso" | "erro"; onNavigate: (v: string) => void }) {
+  return (
+    <AuthCard>
+      <Logo />
+      <div className="text-center">
+        {tipo === "sucesso" ? (
+          <>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+              <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+            </div>
+            <h2 className="text-lg font-black text-slate-900">E-mail Confirmado!</h2>
+            <p className="mt-3 text-sm text-slate-500">Sua conta foi verificada com sucesso. Agora você pode acessar o sistema.</p>
+          </>
+        ) : (
+          <>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-100">
+              <svg className="h-8 w-8 text-rose-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
+            </div>
+            <h2 className="text-lg font-black text-slate-900">Erro na Confirmação</h2>
+            <p className="mt-3 text-sm text-slate-500">
+              {tipo === "erro" ? "Não foi possível confirmar seu e-mail. O link pode ter expirado ou ser inválido." : "Link inválido ou expirado."}
+            </p>
+          </>
         )}
+        <button onClick={() => onNavigate("login")} className="mt-6 w-full rounded-2xl bg-slate-900 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 active:scale-[0.98]">
+          Voltar ao Login
+        </button>
       </div>
     </AuthCard>
   );
@@ -476,4 +736,4 @@ export function TelaConfirmEmailChange({ onNavigate }: { onNavigate: (v: string)
 
 // ── Export all views ───────────────────────────────────────────────────
 
-export type AuthView = "login" | "register" | "verify" | "forgot" | "confirm-email";
+export type AuthView = "login" | "register" | "verify" | "forgot" | "confirm-email" | "verified" | "verify_error";

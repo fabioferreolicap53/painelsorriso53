@@ -4,8 +4,8 @@ import PaginaPacientes from "./PaginaPacientes";
 import PaginaFavoritos from "./PaginaFavoritos";
 import PaginaAcompanhamentos from "./PaginaAcompanhamentos";
 import PaginaConfiguracoes from "./PaginaConfiguracoes";
-import { TelaLogin, TelaRegister, TelaVerify, TelaForgot, TelaConfirmEmailChange } from "./Auth";
-import type { AuthView } from "./Auth";
+import { TelaLogin, TelaRegister, TelaVerify, TelaForgot, EmailActionPage, TelaVerificacaoResultado } from "./Auth";
+import type { AuthView, EmailAction } from "./Auth";
 import SmileIcon from "./SmileIcon";
 
 // ── Tipos ───────────────────────────────────────────────────────────────
@@ -18,8 +18,8 @@ interface AuthUser {
   name: string;
   role: string;
   unidade?: string;
-  odonto?: string;
   equipe?: string;
+  favoritos?: string[];
 }
 
 // ── Header Premium ───────────────────────────────────────────────────────
@@ -78,16 +78,8 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
             </svg>
           </button>
 
-          {/* Logo texto — mobile compacto (< sm) */}
-          <div className="sm:hidden">
-            <div className="flex items-center gap-1.5">
-              <SmileIcon className="h-6 w-6" />
-              <span className="rounded-md bg-white/10 px-1 py-0.5 text-[9px] font-bold text-cyan-300">5.3</span>
-            </div>
-          </div>
-
           {/* Logo texto — completo (sm+) */}
-          <div className="hidden sm:block min-w-0">
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-nowrap">
               <SmileIcon className="h-5 w-5 sm:h-6 sm:w-6" />
               <span className="text-[13px] sm:text-[15px] font-bold tracking-wide text-white/90 whitespace-nowrap">PAINEL</span>
@@ -117,13 +109,33 @@ function Header({ pagina, onNavigate, onLogout, user }: HeaderProps) {
           ))}
         </nav>
 
-        {/* User + Ações */}
-        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
-          {/* Badge do perfil/role */}
-          <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-cyan-300 ring-1 ring-white/10">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-            {user.role === "cap" ? "CAP" : user.role === "odonto" ? "Odonto" : user.role === "admin" ? "Admin" : "Unidade"}
+        {/* Perfil + Unidade — centralizados no mobile */}
+        <div className="flex flex-col items-center gap-0.5 md:hidden flex-1 min-w-0">
+          <span className="flex items-center gap-1 rounded-full bg-white/[0.08] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-cyan-300 ring-1 ring-white/[0.08]">
+            <span className="h-1 w-1 rounded-full bg-cyan-400" />
+            {user.role === "cap" ? "CAP" : user.role === "odonto" ? "Odonto" : "Unidade"}
           </span>
+          {(user.role === "unidade" || user.role === "odonto") && user.unidade && (
+            <span className="text-[8px] font-medium text-white/40 truncate max-w-[160px]">
+              {user.unidade}
+            </span>
+          )}
+        </div>
+
+        {/* User + Ações — desktop */}
+        <div className="hidden md:flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+          {/* Badge do perfil/role + unidade */}
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-cyan-300 ring-1 ring-white/10">
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+              {user.role === "cap" ? "CAP" : user.role === "odonto" ? "Odonto" : "Unidade"}
+            </span>
+            {(user.role === "unidade" || user.role === "odonto") && user.unidade && (
+              <span className="text-[9px] font-medium text-white/40 truncate max-w-[140px]">
+                {user.unidade}
+              </span>
+            )}
+          </div>
 
           {/* Engrenagem — configurações (só em lg+ pra não competir espaço) */}
           <button
@@ -291,12 +303,34 @@ export default function PainelSorriso53() {
   }
 
   // ── Auth View State ────────────────────────────────────────────────
-  const [authView, setAuthView] = useState<AuthView>(() => {
-    // Verificar se há token na URL (confirmação de email, reset de senha, etc.)
-    const hash = window.location.hash;
-    if (hash.includes("token=")) return "confirm-email";
-    return "login";
+  const [emailAction] = useState<{ token: string; action: EmailAction } | null>(() => {
+    const token = (window as any).__authToken as string | undefined;
+    const action = (window as any).__authAction as string | undefined;
+    delete (window as any).__authToken;
+    delete (window as any).__authAction;
+    if (token && token.length >= 10) {
+      return {
+        action: (action === "confirm_email_change" ? "confirm_email_change" : "reset_password") as EmailAction,
+        token,
+      };
+    }
+    return null;
   });
+
+  const [verificacaoStatus] = useState<"nenhum" | "sucesso" | "erro">(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verified") === "1") {
+      window.history.replaceState(null, "", window.location.pathname);
+      return "sucesso";
+    }
+    if (params.get("verify_error")) {
+      window.history.replaceState(null, "", window.location.pathname);
+      return "erro";
+    }
+    return "nenhum";
+  });
+
+  const [authView, setAuthView] = useState<AuthView>("login");
 
   function handleAuthNavigate(view: string) {
     setAuthView(view as AuthView);
@@ -304,6 +338,11 @@ export default function PainelSorriso53() {
   }
 
   if (!user) {
+    if (emailAction) {
+      return <EmailActionPage token={emailAction.token} action={emailAction.action} onNavigate={handleAuthNavigate} />;
+    }
+    if (verificacaoStatus === "sucesso") return <TelaVerificacaoResultado tipo="sucesso" onNavigate={handleAuthNavigate} />;
+    if (verificacaoStatus === "erro") return <TelaVerificacaoResultado tipo="erro" onNavigate={handleAuthNavigate} />;
     switch (authView) {
       case "register":
         return <TelaRegister onNavigate={handleAuthNavigate} />;
@@ -311,8 +350,6 @@ export default function PainelSorriso53() {
         return <TelaVerify onNavigate={handleAuthNavigate} />;
       case "forgot":
         return <TelaForgot onNavigate={handleAuthNavigate} />;
-      case "confirm-email":
-        return <TelaConfirmEmailChange onNavigate={handleAuthNavigate} />;
       default:
         return <TelaLogin onLogin={handleLogin} onNavigate={handleAuthNavigate} />;
     }

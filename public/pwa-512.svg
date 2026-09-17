@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#164e63"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <circle cx="256" cy="190" r="85" fill="none" stroke="url(#accent)" stroke-width="12"/>
+  <path d="M171 265 Q213 318 256 286 Q299 318 341 265" fill="none" stroke="url(#accent)" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="256" cy="190" r="32" fill="url(#accent)"/>
+  <rect x="107" y="345" width="298" height="10" rx="5" fill="#22d3ee" opacity="0.4"/>
+  <rect x="149" y="375" width="214" height="10" rx="5" fill="#3b82f6" opacity="0.3"/>
+  <rect x="191" y="405" width="130" height="8" rx="4" fill="#22d3ee" opacity="0.2"/>
+  <text x="256" y="292" text-anchor="middle" font-family="system-ui,sans-serif" font-size="26" font-weight="900" fill="#22d3ee" letter-spacing="2">5.3</text>
+</svg>

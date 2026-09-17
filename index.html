@@ -5,9 +5,90 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Painel Sorriso 5.3</title>
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Sistema de Monitoramento dos Grupos Prioritários de Saúde" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Painel Sorriso" />
+    <link rel="apple-touch-icon" href="/pwa-192.svg" />
   </head>
   <body>
     <div id="root"></div>
+    <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var verifyToken = params.get('verify');
+      var authToken = params.get('token');
+      var pbUrl = (window.__POCKETBASE_URL || 'https://centraldedados.dev.br').replace(/\/+$/, '');
+
+      if (verifyToken || authToken) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      if (authToken) {
+        var actionPath = window.location.pathname.toLowerCase();
+        window.__authAction = actionPath.indexOf('/confirm-email-change') !== -1
+          ? 'confirm_email_change' : 'reset_password';
+        window.__authToken = authToken;
+      }
+
+      if (verifyToken) {
+        if (window.fetch) {
+          fetch(pbUrl + '/api/collections/painelsorriso53_users/confirm-verification', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
+            },
+            body: 'token=' + encodeURIComponent(verifyToken),
+          }).then(function(resp) {
+            var ct = resp.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') !== -1) {
+              return resp.json().then(function(data) {
+                if (resp.ok) {
+                  window.location.href = window.location.pathname + '?verified=1';
+                } else {
+                  var msg = (data && data.message) || '';
+                  if (msg.indexOf('already') !== -1 || msg.indexOf('verificado') !== -1) {
+                    window.location.href = window.location.pathname + '?verified=1';
+                  } else {
+                    window.location.href = window.location.pathname + '?verify_error=1';
+                  }
+                }
+              });
+            }
+            if (resp.ok || resp.redirected) {
+              window.location.href = window.location.pathname + '?verified=1';
+            } else {
+              window.location.href = window.location.pathname + '?verify_error=1';
+            }
+          }).catch(function() {
+            window.location.href = window.location.pathname + '?verify_error=connection';
+          });
+        } else {
+          var form = document.createElement('form');
+          form.method = 'POST';
+          form.action = pbUrl + '/api/collections/painelsorriso53_users/confirm-verification';
+          form.target = '_self';
+          form.style.display = 'none';
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'token';
+          input.value = verifyToken;
+          form.appendChild(input);
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(function() {});
+      }
+    </script>
   </body>
 </html>

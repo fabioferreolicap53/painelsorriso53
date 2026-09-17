@@ -123,7 +123,7 @@ export default function PaginaExclusao() {
 
   // ── Validar senha (fetch REST — NÃO authWithPassword do SDK) ─────────
   // Usa email do user logado + senha digitada no modal.
-  // Apenas role "admin" pode excluir.
+  // Apenas role "cap" pode excluir.
 
   function getLoggedEmail(): string {
     try {
@@ -161,8 +161,8 @@ export default function PaginaExclusao() {
         return false;
       }
 
-      if (data.record?.role !== "admin") {
-        setPasswordError("Apenas administradores podem excluir dados");
+      if (data.record?.role !== "cap") {
+        setPasswordError("Apenas o perfil CAP pode excluir dados");
         return false;
       }
 
@@ -206,7 +206,7 @@ export default function PaginaExclusao() {
       // Buscar todos os IDs via REST paginado
       let allIds: string[] = [];
       let page = 1;
-      const perPage = 5000;
+      const perPage = 300;
 
       while (true) {
         if (flagsRef.current.cancelled) throw new Error("Cancelado");
@@ -216,7 +216,12 @@ export default function PaginaExclusao() {
         });
         if (!res.ok) throw new Error(`Erro HTTP ${res.status} ao buscar registros`);
         const data = await res.json();
-        allIds = allIds.concat(data.items.map((r: { id: string }) => r.id));
+        const items = data.items ?? [];
+        allIds = allIds.concat(items.map((r: { id: string }) => r.id));
+
+        // Se retornou menos que perPage, acabou
+        if (items.length < perPage) break;
+        // Se já pegou tudo
         if (allIds.length >= data.totalItems) break;
         page++;
       }
@@ -411,31 +416,25 @@ export default function PaginaExclusao() {
 
       {/* ═══ ESTADO IDLE: Card de Ação ════════════════════════════════ */}
       {deleteStatus.stage === "idle" && (
-        <div className="rounded-[2.5rem] border border-slate-200/60 bg-white p-8 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50">
-              <svg className="h-6 w-6 text-rose-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <div className="rounded-2xl border border-slate-200/60 bg-gradient-to-br from-slate-50/50 to-white p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-rose-100/80 bg-white p-3.5">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-rose-50">
+              <svg className="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
               </svg>
             </div>
-            <div className="flex-1">
-              <p className="text-lg font-black uppercase tracking-tight text-slate-800">Excluir Todos os Pacientes</p>
-              <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Ação permanente e irreversível</p>
-              <p className="text-sm text-slate-500">
-                Esta ação remove permanentemente todos os dados da coleção <strong>{PB_COLLECTION}</strong>.
-                Você precisará reimportar os dados via CSV.
-              </p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-700">Excluir Todos os Pacientes</p>
+              <p className="text-[10px] text-slate-400">Ação permanente e irreversível</p>
             </div>
-          </div>
-          <div className="mt-5 flex justify-end">
             <button
               onClick={handleOpenModal}
-              className="inline-flex items-center gap-2 rounded-2xl bg-rose-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-rose-200 transition-all hover:bg-rose-700 hover:shadow-xl hover:shadow-rose-300"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-rose-600 to-rose-700 px-4 py-2 text-[10px] font-extrabold uppercase tracking-widest text-white shadow-md shadow-rose-200/50 transition-all duration-200 hover:from-rose-500 hover:to-rose-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
               </svg>
-              Excluir Tudo
+              Excluir
             </button>
           </div>
         </div>
@@ -443,66 +442,40 @@ export default function PaginaExclusao() {
 
       {/* ═══ ESTADO DELETING ══════════════════════════════════════════ */}
       {deleteStatus.stage === "deleting" && (
-        <div className="rounded-[2.5rem] border border-rose-100 bg-white p-8 shadow-sm">
-          {/* Header */}
-          <div className="mb-4 flex items-center gap-3">
+        <div className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50/50 to-white p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-rose-100/80 bg-white p-3.5">
             {deleteControl === "running" && (
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
+              <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-rose-200 border-t-rose-600" />
             )}
             {deleteControl === "paused" && (
-              <div className="h-3 w-3 rounded-full bg-amber-400 animate-pulse" />
+              <div className="h-3 w-3 flex-shrink-0 rounded-full bg-amber-400 animate-pulse" />
             )}
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-rose-600">
-                {deleteControl === "paused" ? "PAUSADO" : "EXCLUINDO"}
-              </p>
-              <p className="text-sm text-slate-500">{deleteStatus.message}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-700">{deleteStatus.message}</p>
+              <p className="text-[10px] text-slate-400">{deleteProgress.deleted} / {deleteProgress.total} registros</p>
             </div>
-          </div>
-
-          {/* Barra de progresso */}
-          <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
-            <span>{deleteProgress.deleted} / {deleteProgress.total} registros</span>
-            <span className="font-bold">
+            <span className="text-[10px] font-extrabold text-rose-600">
               {deleteProgress.total > 0 ? Math.round((deleteProgress.deleted / deleteProgress.total) * 100) : 0}%
             </span>
           </div>
-          <div className="mb-5 h-3 w-full overflow-hidden rounded-full bg-rose-100">
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-rose-100">
             <div
               className="h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-300"
               style={{ width: `${deleteProgress.total > 0 ? (deleteProgress.deleted / deleteProgress.total) * 100 : 0}%` }}
             />
           </div>
-
-          {/* Métricas */}
-          <div className="mb-5 grid grid-cols-3 gap-2">
-            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Tempo</p>
-              <p className="text-sm font-bold text-slate-700">{formatTime(Math.round((Date.now() - startTimeRef.current) / 1000))}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Erros</p>
-              <p className={`text-sm font-bold ${deleteProgress.errors > 0 ? "text-rose-600" : "text-emerald-600"}`}>{deleteProgress.errors}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Estimado</p>
-              <p className="text-sm font-bold text-slate-700">{deleteEta}</p>
-            </div>
-          </div>
-
-          {/* Controles */}
-          <div className="flex gap-3">
+          <div className="mt-3 flex gap-2">
             <button
               onClick={handlePauseResume}
-              className="flex-1 rounded-2xl bg-amber-500 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-amber-600"
+              className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-[10px] font-extrabold uppercase tracking-widest text-white transition-all hover:bg-amber-600"
             >
-              {deleteControl === "paused" ? "\u25B6 Continuar" : "\u23F8 Pausar"}
+              {deleteControl === "paused" ? "▶ Continuar" : "⏸ Pausar"}
             </button>
             <button
               onClick={handleCancel}
-              className="rounded-2xl bg-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-300"
+              className="rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-300"
             >
-              \u23F9 Interromper
+              ⏹ Interromper
             </button>
           </div>
         </div>
@@ -510,57 +483,45 @@ export default function PaginaExclusao() {
 
       {/* ═══ ESTADO COMPLETED ═════════════════════════════════════════ */}
       {deleteStatus.stage === "completed" && deleteSummary && (
-        <div className={`rounded-[2.5rem] border p-8 shadow-sm ${deleteSummary.cancelled ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${deleteSummary.cancelled ? "bg-amber-500 shadow-lg shadow-amber-200" : "bg-emerald-500 shadow-lg shadow-emerald-200"}`}>
+        <div className={`rounded-2xl border p-4 ${deleteSummary.cancelled ? "border-amber-100 bg-gradient-to-br from-amber-50/50 to-white" : "border-emerald-100 bg-gradient-to-br from-emerald-50/50 to-white"}`}>
+          <div className="flex items-center gap-3 rounded-xl border bg-white p-3.5" style={{ borderColor: deleteSummary.cancelled ? "rgb(254 243 199)" : "rgb(209 250 229)" }}>
+            <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${deleteSummary.cancelled ? "bg-amber-100" : "bg-emerald-100"}`}>
               {deleteSummary.cancelled ? (
-                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" /></svg>
+                <svg className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
               ) : (
-                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                <svg className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
               )}
             </div>
-            <div>
-              <p className="text-lg font-black uppercase tracking-tight text-slate-800">
-                {deleteSummary.cancelled ? "Exclusão Interrompida" : "Exclusão Concluída!"}
-              </p>
-              <p className="text-xs text-slate-500">Coleção {PB_COLLECTION}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-700">{deleteSummary.cancelled ? "Exclusão interrompida" : "Exclusão concluída!"}</p>
+              <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-400">
+                <span>{deleteSummary.total.toLocaleString("pt-BR")} registros</span>
+                <span>{formatTime(deleteSummary.elapsedSec)}</span>
+                {deleteSummary.errors > 0 && <span className="font-bold text-rose-600">{deleteSummary.errors} falhas</span>}
+              </div>
             </div>
+            <button onClick={handleReset} className="rounded-lg bg-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-200">
+              Voltar
+            </button>
           </div>
-
-          <div className="mb-5 grid grid-cols-3 gap-2">
-            <div className="rounded-xl bg-white p-3 text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Registros</p>
-              <p className="text-xl font-bold text-slate-800">{deleteSummary.total.toLocaleString("pt-BR")}</p>
-            </div>
-            <div className="rounded-xl bg-white p-3 text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Duração</p>
-              <p className="text-xl font-bold text-slate-800">{formatTime(deleteSummary.elapsedSec)}</p>
-            </div>
-            <div className="rounded-xl bg-white p-3 text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Falhas</p>
-              <p className={`text-xl font-bold ${deleteSummary.errors > 0 ? "text-rose-600" : "text-emerald-600"}`}>{deleteSummary.errors}</p>
-            </div>
-          </div>
-
-          <button onClick={handleReset} className="w-full rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-200">
-            Voltar
-          </button>
         </div>
       )}
 
       {/* ═══ ESTADO ERROR ══════════════════════════════════════════════ */}
       {deleteStatus.stage === "error" && (
-        <div className="rounded-[2.5rem] border border-rose-100 bg-rose-50 p-8 shadow-sm">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-500 shadow-lg shadow-rose-200">
-              <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" /></svg>
+        <div className="rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50/50 to-white p-4">
+          <div className="flex items-center gap-3 rounded-xl border border-rose-100/80 bg-white p-3.5">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-rose-50">
+              <svg className="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
             </div>
-            <p className="text-lg font-black uppercase tracking-tight text-rose-700">Erro na Exclusão</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-700">Erro na Exclusão</p>
+              <p className="text-[10px] text-rose-600">{deleteStatus.message}</p>
+            </div>
+            <button onClick={handleReset} className="rounded-lg bg-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-200">
+              Voltar
+            </button>
           </div>
-          <p className="mb-5 rounded-xl bg-white p-4 text-sm text-rose-600">{deleteStatus.message}</p>
-          <button onClick={handleReset} className="w-full rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-200">
-            Voltar
-          </button>
         </div>
       )}
     </>

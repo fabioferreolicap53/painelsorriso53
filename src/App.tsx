@@ -1,5 +1,11 @@
 import PainelSorriso53 from "./PainelSorriso53";
+import InstallBanner from "./components/InstallBanner";
 
 export default function App() {
-  return <PainelSorriso53 />;
+  return (
+    <>
+      <InstallBanner />
+      <PainelSorriso53 />
+    </>
+  );
 }

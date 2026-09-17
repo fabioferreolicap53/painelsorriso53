@@ -90,12 +90,9 @@ export default function ModalDetalhes({ paciente, onFechar, onAtualizar, onAbrir
 
   // Campos editáveis
   const [gestante, setGestante] = useState(paciente.gestante);
-  const [has, setHas] = useState(paciente.has);
-  const [dm, setDm] = useState(paciente.dm);
-  const [hiv, setHiv] = useState(paciente.hiv);
   const [tb, setTb] = useState(paciente.tb);
   const [tabagista, setTabagista] = useState(paciente.tabagista);
-  const [familiaBF, setFamiliaBF] = useState(paciente.familia_recebe_bf);
+  const [menorDe2Anos, setMenorDe2Anos] = useState(paciente.menor_de_2_anos);
   const [microarea, setMicroarea] = useState(paciente.microarea || "");
 
   const [ultimosAcomps, setUltimosAcomps] = useState<Acompanhamento[]>([]);
@@ -124,12 +121,9 @@ export default function ModalDetalhes({ paciente, onFechar, onAtualizar, onAbrir
   function temAlteracoes() {
     return (
       gestante !== paciente.gestante ||
-      has !== paciente.has ||
-      dm !== paciente.dm ||
-      hiv !== paciente.hiv ||
       tb !== paciente.tb ||
       tabagista !== paciente.tabagista ||
-      familiaBF !== paciente.familia_recebe_bf ||
+      menorDe2Anos !== paciente.menor_de_2_anos ||
       microarea !== (paciente.microarea || "")
     );
   }
@@ -138,8 +132,8 @@ export default function ModalDetalhes({ paciente, onFechar, onAtualizar, onAbrir
     setSalvando(true);
     try {
       const atualizado = await atualizarPaciente(paciente.id, {
-        gestante, has, dm, hiv, tb, tabagista,
-        familia_recebe_bf: familiaBF,
+        gestante, tb, tabagista,
+        menor_de_2_anos: menorDe2Anos,
         microarea,
       });
       setToast({ tipo: "ok", msg: "Dados do paciente atualizados com sucesso!" });
@@ -154,12 +148,9 @@ export default function ModalDetalhes({ paciente, onFechar, onAtualizar, onAbrir
 
   function handleCancelar() {
     setGestante(paciente.gestante);
-    setHas(paciente.has);
-    setDm(paciente.dm);
-    setHiv(paciente.hiv);
     setTb(paciente.tb);
     setTabagista(paciente.tabagista);
-    setFamiliaBF(paciente.familia_recebe_bf);
+    setMenorDe2Anos(paciente.menor_de_2_anos);
     setMicroarea(paciente.microarea || "");
     setEditando(false);
   }
@@ -168,12 +159,8 @@ export default function ModalDetalhes({ paciente, onFechar, onAtualizar, onAbrir
   const indicadores: { label: string; ativo: boolean; cor: string }[] = [
     { label: "Gestante", ativo: gestante, cor: "bg-gradient-to-r from-rose-500 to-pink-500" },
     { label: "Tabagista", ativo: tabagista, cor: "bg-gradient-to-r from-amber-500 to-orange-500" },
-    { label: "HAS", ativo: has, cor: "bg-gradient-to-r from-red-500 to-rose-500" },
-    { label: "DM", ativo: dm, cor: "bg-gradient-to-r from-violet-500 to-purple-500" },
-    { label: "HIV", ativo: hiv, cor: "bg-gradient-to-r from-blue-500 to-indigo-500" },
     { label: "TB", ativo: tb, cor: "bg-gradient-to-r from-orange-500 to-red-500" },
-    { label: "Bolsa Família", ativo: familiaBF, cor: "bg-gradient-to-r from-emerald-500 to-green-500" },
-    ...(idade !== null && idade <= 2 ? [{ label: "Criança ≤ 2a", ativo: true, cor: "bg-gradient-to-r from-cyan-500 to-blue-500" }] : []),
+    ...(menorDe2Anos ? [{ label: "Criança ≤ 2a", ativo: true as boolean, cor: "bg-gradient-to-r from-cyan-500 to-blue-500" }] : []),
   ];
   const indicadoresAtivos = indicadores.filter((i) => i.ativo);
 
@@ -295,11 +282,8 @@ export default function ModalDetalhes({ paciente, onFechar, onAtualizar, onAbrir
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <TogglePremium label="Gestante" valor={gestante} onChange={setGestante} cor="rose" icone={I.gestante} />
                 <TogglePremium label="Tabagista" valor={tabagista} onChange={setTabagista} cor="amber" icone={I.tabagista} />
-                <TogglePremium label="HAS" valor={has} onChange={setHas} cor="red" />
-                <TogglePremium label="DM" valor={dm} onChange={setDm} cor="violet" />
-                <TogglePremium label="HIV" valor={hiv} onChange={setHiv} cor="blue" />
                 <TogglePremium label="TB" valor={tb} onChange={setTb} cor="red" icone={I.tb} />
-                <TogglePremium label="Bolsa Família" valor={familiaBF} onChange={setFamiliaBF} cor="emerald" />
+                <TogglePremium label="Criança ≤ 2a" valor={menorDe2Anos} onChange={setMenorDe2Anos} cor="blue" />
               </div>
             ) : (
               <div className="rounded-xl border-l-4 border-violet-500 bg-gradient-to-r from-violet-50/80 to-white p-3.5">

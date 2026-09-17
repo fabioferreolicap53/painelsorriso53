@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Papa from "papaparse";
+import { relinkarPorCNS, invalidatePacientesCache } from "./pocketbase";
 
 /**
  * Pagina de importacao CSV → PocketBase.
@@ -11,9 +12,14 @@ import Papa from "papaparse";
 
 const PB_URL = import.meta.env.VITE_POCKETBASE_URL as string;
 const PB_COLLECTION = import.meta.env.VITE_POCKETBASE_COLLECTION as string;
+const PB_USERS_COLLECTION = "painelsorriso53_users";
 
 function pbApiBase(): string {
   return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_COLLECTION}/records`;
+}
+
+function usersAuthUrl(): string {
+  return `${PB_URL.replace(/\/+$/, "")}/api/collections/${PB_USERS_COLLECTION}/auth-with-password`;
 }
 
 function getAuthToken(): string | null {
@@ -42,19 +48,16 @@ const FIELD_ALIASES: Record<string, string[]> = {
   paciente: ["PACIENTE", "NOME", "NOME PACIENTE", "NOME DO PACIENTE", "NOME COMPLETO"],
   n_pront: ["N PRONT", "N_PRONT", "PRONTUARIO", "NUMERO PRONTUARIO", "PRONT"],
   gestante: ["GESTANTE"],
-  has: ["HAS", "HIPERTENSAO"],
-  dm: ["DM", "DIABETES"],
-  hiv: ["HIV"],
   tb: ["TB", "TUBERCULOSE"],
   tabagista: ["TABAGISTA", "TABAGISMO"],
-  "familia_recebe_bf": ["FAMILIA RECEBE BF", "FAMILIA_RECEBE_BF", "BOLSA FAMILIA", "BF"],
-  data_ultima_cons_oriclista: ["DATA_ULTIMA_CONS_ORICLISTA", "DATA ULTIMA CONS ORICLISTA", "DATA ULTIMA CONSULTA", "DATA ULTIMA CONS", "DATA_ULTIMA_CONS_DENTISTA", "DATA ULTIMA CONS DENTISTA"],
+  menor_de_2_anos: ["MENOR DE 2 ANOS", "MENOR_DE_2_ANOS", "MENOR_2_ANOS", "MENOR 2 ANOS", "MENOR DE2 ANOS", "MENOR_DE2_ANOS"],
   data_de_nascimento: ["DATA_DE_NASCIMENTO", "DATA NASCIMENTO", "DATA DE NASCIMENTO", "NASCIMENTO", "DT_NASCIMENTO"],
   n_cns_da_pessoa_cadastrada: ["N_CNS_DA_PESSOA_CADASTRADA", "CNS", "NUMERO CNS", "NÚMERO CNS", "CNS DA PESSOA", "CNS PESSOA CADASTRADA"],
+  idade: ["IDADE"],
 };
 
 function normalize(h: string): string {
-  return h.trim().toUpperCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+  return h.trim().toUpperCase().replace(/_/g, " ").replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function findField(csvHeader: string): string | null {
@@ -73,6 +76,22 @@ function findField(csvHeader: string): string | null {
 function convertBoolean(val: string): boolean {
   const v = val.trim().toUpperCase();
   return v === "SIM" || v === "TRUE" || v === "1" || v === "S";
+}
+
+// ── Helpers de tempo ──────────────────────────────────────────────────
+
+function formatTime(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function calcEta(imported: number, total: number, elapsedMs: number): string {
+  if (imported === 0 || elapsedMs < 1000) return "--";
+  const rate = imported / (elapsedMs / 1000);
+  const remaining = total - imported;
+  const etaSec = Math.ceil(remaining / rate);
+  return formatTime(etaSec);
 }
 
 // ── Tipos de estado ────────────────────────────────────────────────────
@@ -111,16 +130,106 @@ export default function PaginaImportacao() {
 
   const importFlagsRef = useRef({ paused: false, cancelled: false });
   const importStartTimeRef = useRef(0);
+  const importProgressRef = useRef({ imported: 0, total: 0 });
+  const importEtaTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [importEta, setImportEta] = useState("--");
+
+  // Modal senha — validação de role "cap" antes de importar
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const pendingFileRef = useRef<File | null>(null);
 
   // Cleanup
   useEffect(() => {
     return () => {
+      if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
       if (importControl === "running" || importControl === "paused") {
         importFlagsRef.current.cancelled = true;
       }
     };
   }, [importControl]);
+
+  // ── Validar senha — apenas role "cap" pode importar ────────────────
+
+  function getLoggedEmail(): string {
+    try {
+      const stored = localStorage.getItem("pb_user");
+      if (stored) {
+        const user = JSON.parse(stored);
+        return user.email ?? "";
+      }
+    } catch { /* ignore */ }
+    return "";
+  }
+
+  async function validatePassword(): Promise<boolean> {
+    if (!passwordInput.trim()) {
+      setPasswordError("Digite sua senha");
+      return false;
+    }
+
+    const email = getLoggedEmail();
+    if (!email) {
+      setPasswordError("Sessão expirada. Faça login novamente");
+      return false;
+    }
+
+    try {
+      const resp = await fetch(usersAuthUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identity: email, password: passwordInput }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok || !data.token) {
+        setPasswordError("Senha incorreta");
+        return false;
+      }
+
+      if (data.record?.role !== "cap") {
+        setPasswordError("Apenas o perfil CAP pode importar dados");
+        return false;
+      }
+
+      return true;
+    } catch {
+      setPasswordError("Erro ao validar senha");
+      return false;
+    }
+  }
+
+  function handleOpenPasswordModal(file: File) {
+    pendingFileRef.current = file;
+    setPasswordInput("");
+    setPasswordError("");
+    setShowPassword(false);
+    setShowPasswordModal(true);
+  }
+
+  function handleClosePasswordModal() {
+    setShowPasswordModal(false);
+    setPasswordInput("");
+    setPasswordError("");
+    pendingFileRef.current = null;
+  }
+
+  async function handleConfirmImport() {
+    const ok = await validatePassword();
+    if (!ok) return;
+
+    const file = pendingFileRef.current;
+    setShowPasswordModal(false);
+    setPasswordInput("");
+    setPasswordError("");
+    pendingFileRef.current = null;
+
+    if (file) handleFileUpload(file);
+  }
 
   // ── Handlers de controle ────────────────────────────────────────────
 
@@ -141,10 +250,12 @@ export default function PaginaImportacao() {
   }, []);
 
   const handleReset = useCallback(() => {
+    if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
     setUploadStatus({ stage: "idle", message: "", current: 0, total: 0 });
     setImportControl("idle");
     setImportProgress({ imported: 0, total: 0, errors: 0 });
     setImportSummary(null);
+    setImportEta("--");
   }, []);
 
   // ── Upload + parse + import ─────────────────────────────────────────
@@ -156,11 +267,25 @@ export default function PaginaImportacao() {
       return;
     }
 
+    if (file.size > 50 * 1024 * 1024) {
+      setUploadStatus({ stage: "error", message: "Arquivo muito grande (max. 50MB).", current: 0, total: 0 });
+      return;
+    }
+
     setImportSummary(null);
+    setImportEta("--");
     setUploadStatus({ stage: "reading", message: "Lendo arquivo...", current: 0, total: 0, fileName: file.name });
     setImportControl("running");
     importFlagsRef.current = { paused: false, cancelled: false };
     importStartTimeRef.current = Date.now();
+    importProgressRef.current = { imported: 0, total: 0 };
+
+    // Timer de ETA (usa importProgressRef para evitar stale closure)
+    importEtaTimerRef.current = setInterval(() => {
+      const p = importProgressRef.current;
+      const elapsed = Date.now() - importStartTimeRef.current;
+      setImportEta(calcEta(p.imported, p.total, elapsed));
+    }, 2000);
 
     try {
       // Parse CSV
@@ -199,7 +324,7 @@ export default function PaginaImportacao() {
           if (val === "" || val === "--") continue;
 
           // Booleanos
-          if (["gestante", "has", "dm", "hiv", "tb", "tabagista", "familia_recebe_bf"].includes(field)) {
+          if (["gestante", "tb", "tabagista", "menor_de_2_anos"].includes(field)) {
             rec[field] = convertBoolean(val);
           }
           // Texto puro
@@ -216,6 +341,10 @@ export default function PaginaImportacao() {
         setImportControl("idle");
         return;
       }
+
+      // Mostrar total de registros encontrados
+      setUploadStatus({ stage: "reading", message: `Encontrados ${records.length.toLocaleString("pt-BR")} registros no CSV`, current: 0, total: records.length, fileName: file.name });
+      await new Promise(r => setTimeout(r, 500)); // Pausa breve para mostrar o total
 
       // Insercao em lotes
       const BATCH = 500;
@@ -258,16 +387,37 @@ export default function PaginaImportacao() {
 
         results.forEach((r) => (r.status === "fulfilled" ? imported++ : errors++));
 
+        importProgressRef.current = { imported, total: records.length };
         setImportProgress({ imported, total: records.length, errors });
         setUploadStatus({ stage: "importing", message: `${imported} registros importados...`, current: imported, total: records.length });
       }
 
       // Finalizar
+      if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
       const elapsed = Math.round((Date.now() - importStartTimeRef.current) / 1000);
       setImportSummary({ elapsedSec: elapsed, errors, total: records.length, cancelled: wasCancelled });
-      setUploadStatus({ stage: "completed", message: wasCancelled ? "Importacao interrompida" : "Importacao concluida!", current: imported, total: records.length });
       setImportControl("idle");
+
+      if (!wasCancelled) {
+        // Invalidar cache de pacientes
+        invalidatePacientesCache();
+
+        // Re-vincular acompanhamentos por CNS
+        setUploadStatus({ stage: "importing", message: "Re-vinculando acompanhamentos por CNS...", current: records.length, total: records.length + 1 });
+        try {
+          const relinkResult = await relinkarPorCNS();
+          const relinkMsg = relinkResult.vinculados.length > 0
+            ? ` | ${relinkResult.vinculados.length} vínculos restaurados`
+            : " | todos os vínculos já estavam corretos";
+          setUploadStatus({ stage: "completed", message: `Importacao concluida!${relinkMsg}`, current: imported, total: records.length });
+        } catch {
+          setUploadStatus({ stage: "completed", message: "Importacao concluida! (re-vinculação falhou — use Configurações)", current: imported, total: records.length });
+        }
+      } else {
+        setImportControl("idle");
+      }
     } catch (err: unknown) {
+      if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
       const elapsed = Math.round((Date.now() - importStartTimeRef.current) / 1000);
       setImportSummary({ elapsedSec: elapsed, errors: 0, total: 0, cancelled: false });
       setUploadStatus({ stage: "error", message: `Erro: ${err instanceof Error ? err.message : "Falha na comunicacao"}`, current: 0, total: 0 });
@@ -277,26 +427,99 @@ export default function PaginaImportacao() {
 
   // ── Helpers ─────────────────────────────────────────────────────────
 
-  function formatTime(sec: number): string {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-  }
-
   const progressPct = importProgress.total > 0 ? Math.round((importProgress.imported / importProgress.total) * 100) : 0;
 
   // ── RENDER ──────────────────────────────────────────────────────────
 
   return (
     <>
-      <div className="max-w-3xl mx-auto">
+      {/* ═══ MODAL DE SENHA ═══════════════════════════════════════════ */}
+      {showPasswordModal && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={handleClosePasswordModal}
+        >
+          <div
+            className="relative w-full max-w-md rounded-[2.5rem] border border-blue-100 bg-white p-8 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-blue-500/5 blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-blue-500/5 blur-2xl" />
+
+            <div className="relative mb-5 flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg shadow-blue-200">
+                <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-lg font-black uppercase tracking-tight text-slate-800">Autorização Necessária</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-500">Apenas perfil CAP</p>
+              </div>
+            </div>
+
+            <div className="relative mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm text-blue-700">
+                Somente usuários com perfil <strong>CAP</strong> podem importar dados na coleção <strong>{PB_COLLECTION}</strong>. Digite sua senha para confirmar.
+              </p>
+            </div>
+
+            <div className="relative mb-5">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                Digite sua senha para confirmar
+              </label>
+              <div className="relative">
+                <svg className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  autoFocus
+                  value={passwordInput}
+                  onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(""); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleConfirmImport(); }}
+                  className="w-full rounded-2xl border-2 border-slate-200 bg-slate-50 py-4 pl-11 pr-12 text-sm text-slate-700 outline-none transition-colors focus:border-blue-400 focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-600"
+                >
+                  {showPassword ? (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {passwordError && (
+                <p className="mt-2 text-xs text-rose-600">{passwordError}</p>
+              )}
+            </div>
+
+            <div className="relative flex gap-3">
+              <button onClick={handleClosePasswordModal} className="flex-1 rounded-2xl bg-slate-100 px-4 py-4 text-xs font-bold uppercase tracking-widest text-slate-600 transition-all hover:bg-slate-200">
+                Cancelar
+              </button>
+              <button onClick={handleConfirmImport} className="flex-1 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-4 text-xs font-bold uppercase tracking-widest text-white shadow-lg shadow-blue-200 transition-all hover:from-blue-700 hover:to-blue-800">
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div>
 
         {/* ── Estado IDLE: Drop Zone ──────────────────────────────────── */}
         {uploadStatus.stage === "idle" && (
-          <div className="rounded-[2.5rem] border border-slate-200/60 bg-white p-8 shadow-sm">
-            <p className="text-xl font-black uppercase tracking-tight text-slate-800">Importar CSV</p>
-            <p className="mb-6 text-xs font-bold uppercase tracking-widest text-slate-400">Adicione registros a base de pacientes</p>
-
+          <div className="rounded-2xl border border-slate-200/60 bg-gradient-to-br from-slate-50/50 to-white p-4">
             <div
               onClick={() => fileInputRef.current?.click()}
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -304,19 +527,18 @@ export default function PaginaImportacao() {
                 e.preventDefault();
                 e.stopPropagation();
                 const file = e.dataTransfer.files[0];
-                if (file) handleFileUpload(file);
+                if (file) handleOpenPasswordModal(file);
               }}
-              className="group flex cursor-pointer flex-col items-center justify-center rounded-[2rem] border-2 border-dashed border-slate-200 bg-slate-50/50 p-12 transition-all duration-300 hover:border-blue-400 hover:bg-white hover:shadow-xl hover:shadow-blue-500/5"
+              className="group flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-200/80 bg-blue-50/30 py-8 transition-all duration-200 hover:border-blue-400 hover:bg-blue-50/60 hover:shadow-sm"
             >
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 transition-all group-hover:bg-blue-600">
-                <svg className="h-8 w-8 text-blue-600 transition-all group-hover:scale-110 group-hover:text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100/60 transition-all group-hover:bg-blue-500">
+                <svg className="h-5 w-5 text-blue-500 transition-all group-hover:text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
                 </svg>
               </div>
-              <p className="mb-1 text-sm font-semibold text-slate-600">Solte o CSV aqui</p>
-              <p className="text-xs text-slate-400">ou clique para navegar</p>
+              <p className="mb-0.5 text-xs font-bold text-slate-600">Solte o CSV aqui</p>
+              <p className="text-[10px] text-slate-400">ou clique para navegar</p>
             </div>
-
             <input
               ref={fileInputRef}
               type="file"
@@ -324,79 +546,48 @@ export default function PaginaImportacao() {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) handleFileUpload(file);
+                if (file) handleOpenPasswordModal(file);
                 e.target.value = "";
               }}
             />
-
-            <p className="mt-4 text-center text-xs text-slate-400">
-              Formato aceito: .csv &bull; Colecao: {PB_COLLECTION}
+            <p className="mt-2.5 text-center text-[10px] text-slate-400">
+              Formato: .csv &bull; Max: 50MB &bull; Colecao: {PB_COLLECTION}
             </p>
           </div>
         )}
 
         {/* ── Estado IMPORTING ───────────────────────────────────────── */}
         {uploadStatus.stage === "importing" && (
-          <div className="rounded-[2.5rem] border border-blue-100 bg-white p-8 shadow-sm">
-            {/* Header */}
-            <div className="mb-4 flex items-center gap-3">
+          <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/30 to-white p-4">
+            <div className="flex items-center gap-3 rounded-xl border border-blue-100/80 bg-white p-3.5">
               {importControl === "running" && (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+                <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
               )}
               {importControl === "paused" && (
-                <div className="h-3 w-3 rounded-full bg-amber-400 animate-pulse" />
+                <div className="h-3 w-3 flex-shrink-0 rounded-full bg-amber-400 animate-pulse" />
               )}
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-blue-600">
-                  {importControl === "paused" ? "PAUSADO" : "IMPORTANDO"}
-                </p>
-                <p className="text-sm text-slate-500">{uploadStatus.fileName}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-slate-700">{uploadStatus.fileName}</p>
+                <p className="text-[10px] text-slate-400">{importProgress.imported} / {importProgress.total} registros</p>
               </div>
+              <span className="text-[10px] font-extrabold text-blue-600">{progressPct}%</span>
             </div>
-
-            {/* Barra de progresso */}
-            <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
-              <span>{importProgress.imported} / {importProgress.total} registros</span>
-              <span className="font-bold">{progressPct}%</span>
-            </div>
-            <div className="mb-5 h-3 w-full overflow-hidden rounded-full bg-blue-100">
+            <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-
-            {/* Metricas */}
-            <div className="mb-5 grid grid-cols-3 gap-2">
-              <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Tempo</p>
-                <p className="text-sm font-bold text-slate-700">{formatTime(Math.round((Date.now() - importStartTimeRef.current) / 1000))}</p>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Erros</p>
-                <p className={`text-sm font-bold ${importProgress.errors > 0 ? "text-red-600" : "text-emerald-600"}`}>{importProgress.errors}</p>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-2.5 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Restante</p>
-                <p className="text-sm font-bold text-slate-700">
-                  {importProgress.total - importProgress.imported > 0
-                    ? `${importProgress.total - importProgress.imported} reg.`
-                    : "..."}
-                </p>
-              </div>
-            </div>
-
-            {/* Controles */}
-            <div className="flex gap-3">
+            <div className="mt-3 flex gap-2">
               <button
                 onClick={handlePauseResume}
-                className="flex-1 rounded-2xl bg-amber-500 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-amber-600"
+                className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-[10px] font-extrabold uppercase tracking-widest text-white transition-all hover:bg-amber-600"
               >
                 {importControl === "paused" ? "▶ Continuar" : "⏸ Pausar"}
               </button>
               <button
                 onClick={handleCancel}
-                className="rounded-2xl bg-slate-200 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-300"
+                className="rounded-lg bg-slate-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-300"
               >
                 ⏹ Interromper
               </button>
@@ -406,57 +597,45 @@ export default function PaginaImportacao() {
 
         {/* ── Estado COMPLETED ────────────────────────────────────────── */}
         {uploadStatus.stage === "completed" && importSummary && (
-          <div className={`rounded-[2.5rem] border p-8 shadow-sm ${importSummary.cancelled ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}>
-            <div className="mb-4 flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full ${importSummary.cancelled ? "bg-amber-500 shadow-lg shadow-amber-200" : "bg-emerald-500 shadow-lg shadow-emerald-200"}`}>
+          <div className={`rounded-2xl border p-4 ${importSummary.cancelled ? "border-amber-200 bg-gradient-to-br from-amber-50/50 to-white" : "border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white"}`}>
+            <div className="flex items-center gap-3 rounded-xl border bg-white p-3.5">
+              <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg ${importSummary.cancelled ? "bg-amber-500" : "bg-emerald-500"}`}>
                 {importSummary.cancelled ? (
-                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" /></svg>
+                  <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" /></svg>
                 ) : (
-                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                  <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
                 )}
               </div>
-              <div>
-                <p className="text-lg font-black uppercase tracking-tight text-slate-800">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-slate-700">
                   {importSummary.cancelled ? "Importacao Interrompida" : "Importacao Concluida!"}
                 </p>
-                <p className="text-xs text-slate-500">{uploadStatus.fileName}</p>
+                <p className="text-[10px] text-slate-400">
+                  {importSummary.total.toLocaleString("pt-BR")} registros &bull; {formatTime(importSummary.elapsedSec)} &bull; {importSummary.errors} falhas
+                </p>
               </div>
+              <button onClick={handleReset} className="rounded-lg bg-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-200">
+                Voltar
+              </button>
             </div>
-
-            <div className="mb-5 grid grid-cols-3 gap-2">
-              <div className="rounded-xl bg-white p-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Registros</p>
-                <p className="text-xl font-bold text-slate-800">{importSummary.total.toLocaleString("pt-BR")}</p>
-              </div>
-              <div className="rounded-xl bg-white p-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Duracao</p>
-                <p className="text-xl font-bold text-slate-800">{formatTime(importSummary.elapsedSec)}</p>
-              </div>
-              <div className="rounded-xl bg-white p-3 text-center">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Falhas</p>
-                <p className={`text-xl font-bold ${importSummary.errors > 0 ? "text-red-600" : "text-emerald-600"}`}>{importSummary.errors}</p>
-              </div>
-            </div>
-
-            <button onClick={handleReset} className="w-full rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-200">
-              Voltar
-            </button>
           </div>
         )}
 
         {/* ── Estado ERROR ────────────────────────────────────────────── */}
         {uploadStatus.stage === "error" && (
-          <div className="rounded-[2.5rem] border border-red-100 bg-red-50 p-8 shadow-sm">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 shadow-lg shadow-red-200">
-                <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" /></svg>
+          <div className="rounded-2xl border border-red-100 bg-gradient-to-br from-red-50/50 to-white p-4">
+            <div className="flex items-center gap-3 rounded-xl border border-red-100/80 bg-white p-3.5">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-red-500">
+                <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z" /></svg>
               </div>
-              <p className="text-lg font-black uppercase tracking-tight text-red-700">Erro na Importacao</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-red-700">Erro na Importacao</p>
+                <p className="text-[10px] truncate text-red-500">{uploadStatus.message}</p>
+              </div>
+              <button onClick={handleReset} className="rounded-lg bg-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-200">
+                Voltar
+              </button>
             </div>
-            <p className="mb-5 rounded-xl bg-white p-4 text-sm text-red-600">{uploadStatus.message}</p>
-            <button onClick={handleReset} className="w-full rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-600 transition-all hover:bg-slate-200">
-              Voltar
-            </button>
           </div>
         )}
 

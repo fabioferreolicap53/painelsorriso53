@@ -38,8 +38,8 @@ const SITUAÇÕES_POS_BUSCA = [
 
 const ENTRAVES_OPTIONS = [
   "HORÁRIOS INCOMPATÍVEIS COM A ROTINA DE TRABALHO",
-  "VERGONHA OU CONSTRANGIMENTO DURANTE O EXAME",
-  "IDEIA EQUIVOCADA SOBRE A NECESSIDADE DE FAZER EXAME",
+  "VERGONHA OU CONSTRANGIMENTO DURANTE A CONSULTA",
+  "IDEIA EQUIVOCADA SOBRE A NECESSIDADE DE PASSAR PELA CONSULTA",
   "FAZ ACOMPANHAMENTO PELA REDE PRIVADA",
   "DIFICULDADE DE LOCOMOÇÃO (EX:ACAMADA)",
   "DISTÂNCIA DA UNIDADE",
@@ -508,7 +508,7 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
         onEditSalvo?.();
         setTimeout(() => onFechar(), 800);
       } else {
-        const novo = await criarAcompanhamento({
+        await criarAcompanhamento({
           paciente_id: paciente.id,
           usuario_id: usuarioId,
           cns: paciente.n_cns_da_pessoa_cadastrada ?? "",
@@ -523,10 +523,9 @@ export default function ModalAcompanhamento({ paciente, usuarioId, onFechar, aco
           data_consulta_odonto: situacaoPosBusca === "CONSULTA NA ODONTO REALIZADA" ? dataConsultaOdonto : "",
           resolucao: resolvido === true ? "RESOLVIDO" : resolvido === false ? "NÃO RESOLVIDO" : "PENDENTE",
         });
-        setAcompanhamentos((prev) => [novo, ...prev]);
         setToast("Registro salvo com sucesso!");
-        limparForm();
-        setModoForm(false);
+        onEditSalvo?.();
+        setTimeout(() => onFechar(), 600);
       }
     } catch {
       setErro("Erro ao salvar registro. Tente novamente.");

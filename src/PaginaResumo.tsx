@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import { buscarPacientes, buscarTodosAcompanhamentos } from "./pocketbase";
+import { buscarPacientes, buscarTodosAcompanhamentos, buildFiltroRole } from "./pocketbase";
 import type { Paciente, Acompanhamento } from "./types";
 import { calcularIdade } from "./PaginaPacientes";
 import { CustomSelect } from "./CustomSelect";
 import { calcularResolucao, classificarResolucao } from "./resolucao";
-import { BarraResolucao } from "./ResolucaoUI";
 
 // ── Active Filters Bar ───────────────────────────────────────────────
 
@@ -98,51 +97,13 @@ function ChartCard({ titulo, subtitulo, children, icone, className = "" }: { tit
   );
 }
 
-// ── KPI Stat Card ───────────────────────────────────────────────────────
-
-function KpiCard({ titulo, valor, icone, cor, corHex, subtitulo, delay = 0 }: { titulo: string; valor: string | number; icone: React.ReactNode; cor: string; corHex: string; subtitulo?: string; delay?: number }) {
-  return (
-    <div
-      className="group relative overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-[0_4px_12px_rgba(0,0,0,0.05),inset_0_1px_0_rgba(255,255,255,0.8),0_0_0_1px_rgba(226,232,240,0.6)] transition-all duration-500 hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25),0_8px_24px_-6px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.9)] hover:-translate-y-1.5 animate-[fadeInUp_0.6s_ease-out_both]"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      {/* Top accent bar */}
-      <div className={`absolute inset-x-0 top-0 h-1 ${cor} transition-all duration-300 group-hover:h-1.5`} />
-      {/* Hover glow */}
-      <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-0 blur-2xl transition-opacity duration-700 group-hover:opacity-30" style={{ backgroundColor: corHex }} />
-      <div className="absolute -left-4 -bottom-4 h-16 w-16 rounded-full opacity-0 blur-xl transition-opacity duration-700 group-hover:opacity-20" style={{ backgroundColor: corHex }} />
-      {/* Content */}
-      <div className="relative px-6 pt-6 pb-5">
-        <div className="flex items-start justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-slate-500 transition-colors">{titulo}</p>
-            <p className="mt-2.5 text-[2.25rem] font-black tracking-tight text-slate-900 tabular-nums leading-none">{valor}</p>
-            {subtitulo && <p className="mt-1.5 text-[10px] font-semibold text-slate-400">{subtitulo}</p>}
-          </div>
-          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-3" style={{ backgroundColor: `${corHex}12`, color: corHex, boxShadow: `0 0 0 1px ${corHex}18` }}>
-            {icone}
-          </div>
-        </div>
-      </div>
-      {/* Bottom subtle line */}
-      <div className="h-px mx-6 bg-gradient-to-r from-transparent via-slate-100 to-transparent" />
-      <div className="px-6 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: corHex }} />
-          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-300">Ativo</span>
-        </div>
-        <svg className="h-3.5 w-3.5 text-slate-300 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-      </div>
-    </div>
-  );
-}
-
 // ── Pagina Resumo ───────────────────────────────────────────────────────
 
 export default function PaginaResumo() {
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [acomps, setAcomps] = useState<Acompanhamento[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const competencia = (() => { try { return localStorage.getItem("pb_competencia") ?? ""; } catch { return ""; } })();
   const [filtroUnidade, setFiltroUnidade] = useState("todas");
   const [filtroEquipe, setFiltroEquipe] = useState("todas");
   const [filtroMicroarea, setFiltroMicroarea] = useState("todas");
@@ -157,6 +118,7 @@ export default function PaginaResumo() {
   const [filtroTipoContatoDraft, setFiltroTipoContatoDraft] = useState<string>("todas");
   const [filtroResolucao, setFiltroResolucao] = useState<string>("todos");
   const [filtro, setFiltro] = useState<string>("todos");
+  const [filtroGrupoDraft, setFiltroGrupoDraft] = useState<string>("todos");
   const [busca, setBusca] = useState("");
   const [mostrarBusca, setMostrarBusca] = useState(false);
   const [mostrarAvancada, setMostrarAvancada] = useState(false);
@@ -166,20 +128,25 @@ export default function PaginaResumo() {
     + (filtroResolucao !== "todos" ? 1 : 0) + (filtro !== "todos" ? 1 : 0);
 
   const unidades = Array.from(new Set(pacientes.map(p => p.unidade).filter(Boolean))).sort();
-  const equipes = Array.from(new Set(pacientes.map(p => p.equipe).filter(Boolean))).sort();
-  const microareas = Array.from(new Set(pacientes.map(p => p.microarea).filter(Boolean))).sort();
+  const pacParaEquipes = filtroUnidadeDraft !== "todas" ? pacientes.filter(p => p.unidade === filtroUnidadeDraft) : pacientes;
+  const equipes = Array.from(new Set(pacParaEquipes.map(p => p.equipe).filter(Boolean))).sort();
+  const pacParaMicro = pacParaEquipes.filter(p => filtroEquipeDraft === "todas" || p.equipe === filtroEquipeDraft);
+  const microareas = Array.from(new Set(pacParaMicro.map(p => p.microarea).filter(Boolean))).sort();
 
   useEffect(() => {
     let cancel = false;
     async function carregar() {
       try {
+        const filtroRole = buildFiltroRole();
         const [pacs, ac] = await Promise.all([
-          buscarPacientes({ perPage: 500 }),
+          buscarPacientes({ perPage: 500, filter: filtroRole ?? undefined }),
           buscarTodosAcompanhamentos(),
         ]);
         if (!cancel) {
           setPacientes(pacs.items);
-          setAcomps(ac);
+          // Filtrar acompanhamentos apenas dos pacientes permitidos pelo perfil
+          const pacsPermitidos = new Set(pacs.items.map((p) => p.id));
+          setAcomps(ac.filter((a) => pacsPermitidos.has(a.paciente_id)));
         }
       } catch { /* ignore */ }
       finally { if (!cancel) setCarregando(false); }
@@ -191,12 +158,11 @@ export default function PaginaResumo() {
   // ── Métricas ────────────────────────────────────────────────────────
 
   const isPrioritario = (p: Paciente) => {
-    const id = calcularIdade(p.data_de_nascimento);
-    return p.gestante || p.tabagista || p.tb || (id !== null && id <= 2);
+    return p.gestante || p.tabagista || p.tb || p.menor_de_2_anos;
   };
   const pacientesPrioritarios = pacientes.filter(isPrioritario).filter((p) => {
     if (filtro === "gestante" && !p.gestante) return false;
-    if (filtro === "crianca") { const id = calcularIdade(p.data_de_nascimento); if (!(id !== null && id <= 2)) return false; }
+    if (filtro === "crianca" && !p.menor_de_2_anos) return false;
     if (filtro === "tabagista" && !p.tabagista) return false;
     if (filtro === "tb" && !p.tb) return false;
     if (!busca.trim()) return true;
@@ -225,20 +191,15 @@ export default function PaginaResumo() {
     });
 
   const totalPacientes = pacientesPrioritarios.length;
-  const totalAcomps = acompsPrioritarios.length;
 
   const agora = new Date();
   const mesAtual = agora.getMonth();
   const anoAtual = agora.getFullYear();
-  const acompsMesAtual = acompsPrioritarios.filter((a) => {
-    const [y, m] = (a.data_da_busca || "").split("-");
-    return parseInt(y, 10) === anoAtual && parseInt(m, 10) === mesAtual + 1;
-  }).length;
 
   const gestantes = pacientesPrioritarios.filter((p) => p.gestante).length;
   const tabagistas = pacientesPrioritarios.filter((p) => p.tabagista).length;
   const tb = pacientesPrioritarios.filter((p) => p.tb).length;
-  const criancas = pacientesPrioritarios.filter((p) => { const id = calcularIdade(p.data_de_nascimento); return id !== null && id <= 2; }).length;
+  const criancas = pacientesPrioritarios.filter((p) => p.menor_de_2_anos).length;
 
   // ── Dados de Resolução ───────────────────────────────────────────────
 
@@ -252,31 +213,21 @@ export default function PaginaResumo() {
     });
   const dadosResolucao = calcularResolucao(desfechoMapRes, Array.from(idsPrioritarios));
 
+  // ── Dados de Resolução GERAL (todos os acompanhamentos) ─────────────
+  const desfechoMapResGeral: Record<string, { desfecho: string; resolucao?: string | null }> = {};
+  acomps.forEach((a) => {
+    if (!desfechoMapResGeral[a.paciente_id] && a.situacao_pos_busca) {
+      desfechoMapResGeral[a.paciente_id] = { desfecho: a.situacao_pos_busca, resolucao: a.resolucao };
+    }
+  });
+  const dadosResolucaoGeral = calcularResolucao(desfechoMapResGeral, Object.keys(desfechoMapResGeral));
+
   // ── Gráfico Pizza: Categorias ────────────────────────────────────────
 
   const tooltipPremium = {
     backgroundColor: "rgba(15,23,42,0.95)", borderColor: "rgba(255,255,255,0.08)", borderWidth: 1,
     textStyle: { color: "#f8fafc", fontSize: 14, fontWeight: "bold", fontFamily: "Inter, sans-serif" },
     extraCssText: "backdrop-filter:blur(12px);box-shadow:0 8px 32px rgba(0,0,0,0.3);border-radius:12px;padding:14px 20px;",
-  };
-
-  const pizzaOption = {
-    tooltip: { ...tooltipPremium, trigger: "item", formatter: "{b}<br/><span style='font-size:18px;font-weight:900'>{c}</span> <span style='color:#94a3b8'>({d}%)</span>" },
-    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 10, fontWeight: "bold" }, itemGap: 16, itemWidth: 12, itemHeight: 12, icon: "roundRect" },
-    animationDuration: 1200, animationEasing: "elasticOut",
-    series: [{
-      type: "pie", radius: ["40%", "72%"], center: ["50%", "42%"],
-      itemStyle: { borderRadius: 10, borderColor: "#fff", borderWidth: 3 },
-      label: { show: false },
-      emphasis: { scale: true, scaleSize: 12, label: { show: true, fontSize: 15, fontWeight: "900", color: "#1e293b", formatter: "{b}\n{d}%" }, itemStyle: { shadowBlur: 20, shadowColor: "rgba(0,0,0,0.15)" } },
-      animationType: "scale", animationDelay: (i: number) => i * 150,
-      data: [
-        { value: gestantes, name: "GESTANTES", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fb7185" }, { offset: 1, color: "#e11d48" }] } } },
-        { value: criancas, name: "CRIANÇAS ≤2A", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#a78bfa" }, { offset: 1, color: "#7c3aed" }] } } },
-        { value: tabagistas, name: "TABAGISTAS", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fbbf24" }, { offset: 1, color: "#d97706" }] } } },
-        { value: tb, name: "TUBERCULOSE", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fb923c" }, { offset: 1, color: "#ea580c" }] } } },
-      ].filter((d) => d.value > 0),
-    }],
   };
 
   // ── Gráfico Donut: Situação pós-busca ───────────────────────────────
@@ -422,7 +373,7 @@ export default function PaginaResumo() {
 
   // ── Gráfico Barras Horizontais: Entraves ────────────────────────────
 
-  const entravesMap = acompsPrioritarios.reduce<Record<string, number>>((acc, a) => {
+  const entravesMap = acomps.reduce<Record<string, number>>((acc, a) => {
     if (a.entraves_identificados) {
       a.entraves_identificados.split(/[;,]/).map((e) => e.trim().toUpperCase()).filter(Boolean).forEach((e) => { acc[e] = (acc[e] || 0) + 1; });
     }
@@ -543,85 +494,100 @@ export default function PaginaResumo() {
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {[
-              { key: "gestante", label: "Gestantes", activeColor: "text-rose-300", activeBorder: "border-rose-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg> },
-              { key: "crianca", label: "Crianças ≤2a", activeColor: "text-blue-300", activeBorder: "border-blue-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg> },
-              { key: "tabagista", label: "Tabagistas", activeColor: "text-orange-300", activeBorder: "border-orange-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" /></svg> },
-              { key: "tb", label: "TB", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg> },
-            ].map(({ key, label, activeColor, activeBorder, icon }) => (
-              <button
-                key={key}
-                onClick={() => setFiltro(filtro === key ? "todos" : key)}
-                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
-                  filtro === key
-                    ? `${activeColor} ${activeBorder}`
-                    : "text-white/40 border-transparent hover:text-white/70"
-                }`}
-              >
-                {icon}
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-            <div className="h-4 w-px bg-white/10" />
-            {[
-              { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-              { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
-              { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
-            ].map(({ key, label, activeColor, activeBorder, icon }) => (
-              <button
-                key={key}
-                onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
-                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-200 pb-0.5 border-b-2 ${
-                  filtroResolucao === key
-                    ? `${activeColor} ${activeBorder}`
-                    : "text-white/40 border-transparent hover:text-white/70"
-                }`}
-              >
-                {icon}
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-            <div className="h-4 w-px bg-white/10" />
-            <div className="flex items-baseline gap-2">
-              <svg className="h-4 w-4 text-amber-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-              </svg>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Total</span>
-              <span className="text-2xl font-black text-white tabular-nums leading-none">{totalPacientes.toLocaleString("pt-BR")}</span>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-5 w-full">
+            {/* Coluna: Grupos Prioritários */}
+            <div className="hidden sm:flex flex-col items-center gap-1">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-cyan-300/50">GRUPOS PRIORITÁRIOS</span>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                {[
+                  { key: "gestante", label: "Gestantes", activeColor: "text-rose-300", activeBorder: "border-rose-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg> },
+                  { key: "crianca", label: "Crianças ≤2a", activeColor: "text-blue-300", activeBorder: "border-blue-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" /></svg> },
+                  { key: "tabagista", label: "Tabagistas", activeColor: "text-orange-300", activeBorder: "border-orange-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" /></svg> },
+                  { key: "tb", label: "TB", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg> },
+                ].map(({ key, label, activeColor, activeBorder, icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltro(filtro === key ? "todos" : key)}
+                    className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-3 py-1 sm:py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ring-1 ${
+                      filtro === key
+                        ? `${activeColor} ${activeBorder.replace('border-', 'ring-')} bg-white/[0.08] ring-current/30`
+                        : "text-white/40 ring-white/10 hover:text-white/70 hover:ring-white/20"
+                    }`}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="hidden sm:block h-4 w-px bg-white/10" />
-            <div className="w-full sm:w-auto flex items-center gap-2 justify-center sm:justify-start">
-              <button
-                onClick={() => { setMostrarBusca(!mostrarBusca); setMostrarAvancada(false); }}
-                className={`group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarBusca ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
-              >
-                <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
-                <span className="hidden sm:inline">Buscar</span>
-              </button>
-              <button
-                onClick={() => {
-                  setMostrarAvancada(!mostrarAvancada);
-                  setMostrarBusca(false);
-                  if (!mostrarAvancada) {
-                    setFiltroUnidadeDraft(filtroUnidade);
-                    setFiltroEquipeDraft(filtroEquipe);
-                    setFiltroMicroareaDraft(filtroMicroarea);
-                    setFiltroStatusDraft(filtroStatus);
-                    setFiltroTipoBuscaDraft(filtroTipoBusca);
-                    setFiltroTipoContatoDraft(filtroTipoContato);
-                  }
-                }}
-                className={`group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarAvancada ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
-              >
-                <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
-                <span className="hidden sm:inline">Filtros</span>
-                {filtrosAtivos > 0 && (
-                  <span className="rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/30 leading-none">
-                    {filtrosAtivos}
-                  </span>
-                )}
-              </button>
+
+            <div className="hidden sm:block h-12 w-px bg-white/10" />
+
+            {/* Coluna: Resolução dos Acompanhamentos */}
+            <div className="hidden sm:flex flex-col items-center gap-1">
+              <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-cyan-300/50">RESOLUÇÃO DOS ACOMPANHAMENTOS</span>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                {[
+                  { key: "resolvido", label: "Resolvidos", activeColor: "text-emerald-300", activeBorder: "border-emerald-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                  { key: "pendente", label: "Pendentes", activeColor: "text-amber-300", activeBorder: "border-amber-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> },
+                  { key: "nao_resolvido", label: "Não Resolvidos", activeColor: "text-red-300", activeBorder: "border-red-400", icon: <svg className="h-2.5 w-2.5 sm:h-3 sm:w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg> },
+                ].map(({ key, label, activeColor, activeBorder, icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltroResolucao(filtroResolucao === key ? "todos" : key)}
+                    className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-3 py-1 sm:py-1.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ring-1 ${
+                      filtroResolucao === key
+                        ? `${activeColor} ${activeBorder.replace('border-', 'ring-')} bg-white/[0.08] ring-current/30`
+                        : "text-white/40 ring-white/10 hover:text-white/70 hover:ring-white/20"
+                    }`}
+                  >
+                    {icon}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Total + Buscar + Filtros */}
+            <div className="flex items-center gap-2 sm:gap-3 sm:ml-auto">
+              <div className="flex items-baseline gap-2">
+                <svg className="h-4 w-4 text-amber-300/70" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-white/40">Total</span>
+                <span className="text-xl sm:text-2xl font-black text-white tabular-nums leading-none">{totalPacientes.toLocaleString("pt-BR")}</span>
+              </div>
+              <div className="h-4 w-px bg-white/10" />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setMostrarBusca(!mostrarBusca); setMostrarAvancada(false); }}
+                  className={`group relative flex items-center gap-2 rounded-xl px-2.5 sm:px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarBusca ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
+                  <span className="hidden sm:inline">Buscar</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setMostrarAvancada(!mostrarAvancada);
+                    setMostrarBusca(false);
+                    if (!mostrarAvancada) {
+                      setFiltroUnidadeDraft(filtroUnidade);
+                      setFiltroEquipeDraft(filtroEquipe);
+                      setFiltroMicroareaDraft(filtroMicroarea);
+                      setFiltroStatusDraft(filtroStatus);
+                      setFiltroGrupoDraft(filtro);
+                      setFiltroTipoBuscaDraft(filtroTipoBusca);
+                      setFiltroTipoContatoDraft(filtroTipoContato);
+                    }
+                  }}
+                  className={`group relative flex items-center gap-2 rounded-xl px-2.5 sm:px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider ring-1 transition-all duration-200 ${mostrarAvancada ? "bg-white/[0.12] text-white/90 ring-white/20 shadow-lg shadow-white/5" : "bg-white/[0.07] text-white/50 ring-white/10 hover:bg-white/[0.12] hover:text-white/80 hover:ring-white/20"}`}
+                >
+                  <svg className="h-3.5 w-3.5 text-cyan-300 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+                  {filtrosAtivos > 0 && (
+                    <span className="rounded-full bg-cyan-400/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-300 ring-1 ring-cyan-400/30 leading-none">{filtrosAtivos}</span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -634,46 +600,45 @@ export default function PaginaResumo() {
         ...(filtroEquipe !== "todas" ? [{ label: "Equipe", valor: filtroEquipe, cor: "bg-violet-50 text-violet-700 ring-violet-200/60" }] : []),
         ...(filtroMicroarea !== "todas" ? [{ label: "Microárea", valor: filtroMicroarea, cor: "bg-emerald-50 text-emerald-700 ring-emerald-200/60" }] : []),
         ...(filtroStatus !== "todas" ? [{ label: "Status", valor: filtroStatus, cor: "bg-amber-50 text-amber-700 ring-amber-200/60" }] : []),
+        ...(filtroResolucao !== "todos" ? [{ label: "Resolução", valor: filtroResolucao.replace("_", " "), cor: "bg-orange-50 text-orange-700 ring-orange-200/60" }] : []),
         ...(filtroTipoBusca !== "todas" ? [{ label: "Tipo Busca", valor: filtroTipoBusca, cor: "bg-blue-50 text-blue-700 ring-blue-200/60" }] : []),
         ...(filtroTipoContato !== "todas" ? [{ label: "Tipo Contato", valor: filtroTipoContato, cor: "bg-rose-50 text-rose-700 ring-rose-200/60" }] : []),
-        ...(filtroResolucao !== "todos" ? [{ label: "Resolução", valor: filtroResolucao.replace("_", " "), cor: "bg-orange-50 text-orange-700 ring-orange-200/60" }] : []),
       ]} />
 
-      {/* ── Busca Rápida ────────────────────────────────────────── */}
+      {/* ═══ PAINEL FLUTUANTE: BUSCA RÁPIDA ═══════════════════════════ */}
       {mostrarBusca && (
         <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 px-5 sm:px-6 pb-4">
           <div className="mx-auto max-w-[1380px]">
             <div className="relative flex items-center">
-              <svg className="pointer-events-none absolute left-3 h-4 w-4 text-white/40" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-              </svg>
+              <svg className="absolute left-3 h-4 w-4 text-white/30" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" /></svg>
               <input
                 type="text"
-                placeholder="Buscar paciente..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                autoFocus
+                placeholder="Buscar por nome, CNS, microárea..."
                 className="w-full rounded-lg bg-white/[0.07] border border-white/10 py-2.5 pl-10 pr-10 text-sm font-medium text-white placeholder-white/40 outline-none transition-all duration-200 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
               />
-              <button onClick={() => { setBusca(""); setMostrarBusca(false); }} className="absolute right-2 flex h-6 w-6 items-center justify-center rounded-md text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+              <button onClick={() => setMostrarBusca(false)} className="absolute right-3 text-white/40 transition-colors hover:text-white/70">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Filtros Avançados ────────────────────────────────────── */}
+      {/* ═══ PAINEL FLUTUANTE: FILTROS AVANÇADOS ═══════════════════════ */}
       {mostrarAvancada && (
         <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-950 px-3 sm:px-5 md:px-6 pb-4">
           <div className="mx-auto max-w-[1380px] overflow-visible rounded-2xl bg-gradient-to-br from-white/[0.07] to-white/[0.03] ring-1 ring-white/[0.12] shadow-lg shadow-black/20 backdrop-blur-xl">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-white/[0.08] px-3 sm:px-5 py-3">
               <div className="flex items-center gap-2 sm:gap-2.5">
                 <div className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
                   <svg className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
                 </div>
                 <span className="text-[11px] sm:text-sm font-bold uppercase tracking-widest text-white/60">Filtros Avançados</span>
+                {filtrosAtivos > 0 && (
+                  <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[9px] font-black text-cyan-300 ring-1 ring-cyan-400/30">{filtrosAtivos} ativo{filtrosAtivos > 1 ? "s" : ""}</span>
+                )}
               </div>
               <button onClick={() => setMostrarAvancada(false)} className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg text-white/40 transition-all hover:bg-white/10 hover:text-white/70">
                 <svg className="h-3.5 w-3.5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
@@ -712,26 +677,32 @@ export default function PaginaResumo() {
                 </div>
                 <CustomSelect value={filtroMicroareaDraft} onChange={setFiltroMicroareaDraft} options={[{ value: "todas", label: "Todas" }, ...microareas.map(m => ({ value: m, label: m }))]} />
               </div>
-              {/* Grupo (placeholder) */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] opacity-50">
+              {/* Grupo */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
                 <div className="flex items-center gap-2">
                   <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 ring-1 ring-amber-400/20">
-                    <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                    <svg className="h-2.5 w-2.5 text-amber-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" /></svg>
                   </div>
                   <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Grupo</span>
                 </div>
-                <span className="flex-1 text-[11px] font-semibold text-white/30">—</span>
+                <CustomSelect value={filtroGrupoDraft} onChange={setFiltroGrupoDraft} options={[
+                  { value: "todos", label: "Todos" },
+                  { value: "gestante", label: "Gestantes" },
+                  { value: "crianca", label: "Crianças ≤2a" },
+                  { value: "tb", label: "TB" },
+                  { value: "tabagista", label: "Tabagistas" },
+                ]} />
               </div>
             </div>
 
-            {/* Status do Desfecho */}
-            <div className="px-3 sm:px-5 pt-1 sm:pt-3">
+            {/* Status */}
+            <div className="mx-3 sm:mx-5 mb-3 sm:mb-4 mt-2 sm:mt-3 rounded-xl bg-white/[0.05] px-3 sm:px-5 py-2.5 sm:py-3 ring-1 ring-white/[0.08]">
               <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-5 lg:grid-cols-9">
                 <div className="col-span-full flex items-center gap-2 mb-1">
                   <div className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg bg-cyan-400/15 ring-1 ring-cyan-400/20">
                     <svg className="h-2.5 w-2.5 text-cyan-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
                   </div>
-                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Status do Desfecho</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white/40">Status</span>
                 </div>
                 {[
                   { key: "todas", label: "Todas", dot: "", cls: "bg-white text-slate-900 shadow-sm ring-1 ring-white/20" },
@@ -758,8 +729,8 @@ export default function PaginaResumo() {
               </div>
             </div>
 
-            {/* Busca Ativa */}
-            <div className="grid grid-cols-1 gap-2 sm:gap-3 px-3 sm:px-5 pt-1 sm:pt-3 md:grid-cols-2">
+            {/* Busca */}
+            <div className="grid grid-cols-1 gap-2 sm:gap-3 px-3 sm:px-5 pt-2 sm:pt-3 pb-1 md:grid-cols-2">
               {/* Tipo de Busca */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 rounded-xl bg-white/[0.05] px-3 py-2 sm:py-2.5 ring-1 ring-white/[0.08] transition-all hover:bg-white/[0.07] hover:ring-white/[0.12]">
                 <div className="flex items-center gap-2">
@@ -800,6 +771,7 @@ export default function PaginaResumo() {
                   setFiltroEquipeDraft("todas"); setFiltroEquipe("todas");
                   setFiltroMicroareaDraft("todas"); setFiltroMicroarea("todas");
                   setFiltroStatusDraft("todas"); setFiltroStatus("todas");
+                  setFiltroGrupoDraft("todos"); setFiltro("todos");
                   setFiltroTipoBuscaDraft("todas"); setFiltroTipoBusca("todas");
                   setFiltroTipoContatoDraft("todas"); setFiltroTipoContato("todas");
                   setFiltroResolucao("todos");
@@ -815,6 +787,7 @@ export default function PaginaResumo() {
                   setFiltroEquipe(filtroEquipeDraft);
                   setFiltroMicroarea(filtroMicroareaDraft);
                   setFiltroStatus(filtroStatusDraft);
+                  setFiltro(filtroGrupoDraft);
                   setFiltroTipoBusca(filtroTipoBuscaDraft);
                   setFiltroTipoContato(filtroTipoContatoDraft);
                   setMostrarAvancada(false);
@@ -828,6 +801,108 @@ export default function PaginaResumo() {
           </div>
         </div>
       )}
+
+      {/* ═══ CARD: PAINEL DO BANCO DE DADOS ═══════════════════════════ */}
+      <div className="mx-auto max-w-[1380px] px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/60 bg-white shadow-xl shadow-slate-200/40 ring-1 ring-black/[0.02] transition-all duration-500 hover:shadow-2xl hover:shadow-slate-300/50">
+          {/* Glow effects */}
+          <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-gradient-to-br from-cyan-400/20 to-blue-500/10 blur-3xl transition-all duration-700 group-hover:scale-125" />
+          <div className="absolute -bottom-16 -left-16 h-40 w-40 rounded-full bg-gradient-to-tr from-emerald-400/15 to-teal-500/10 blur-3xl transition-all duration-700 group-hover:scale-110" />
+          <div className="absolute -right-10 bottom-0 h-32 w-32 rounded-full bg-gradient-to-t from-amber-400/10 to-orange-500/5 blur-2xl" />
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
+
+          <div className="relative p-4 sm:p-7">
+            {/* Header */}
+            <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 shadow-lg shadow-slate-300/40 sm:h-10 sm:w-10">
+                  <svg className="h-4 w-4 text-cyan-400 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-[11px] font-extrabold uppercase leading-tight tracking-[0.12em] text-slate-800 sm:text-sm sm:tracking-widest">Painel do Banco de Dados</h2>
+                  <p className="mt-0.5 text-[9px] font-bold uppercase leading-snug tracking-wide text-slate-400 sm:text-[10px] sm:tracking-wider">Visão geral dos registros e acompanhamentos</p>
+                </div>
+              </div>
+              {competencia && (
+                <div className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-50 to-blue-50 px-3 py-2 ring-1 ring-cyan-200/60 sm:w-auto sm:justify-start sm:px-4">
+                  <svg className="h-4 w-4 shrink-0 text-cyan-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-cyan-600 sm:tracking-wider">Competência</span>
+                  <span className="text-sm font-black tabular-nums text-cyan-800">
+                    {(() => {
+                      const [ano, mes] = competencia.split("-");
+                      const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                      return `${meses[parseInt(mes, 10) - 1] ?? mes}/${ano}`;
+                    })()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Grid de métricas */}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-4">
+              {/* Total de Pacientes */}
+              <div className="group/card relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-cyan-50/40 p-3.5 ring-1 ring-slate-200/50 shadow-lg shadow-slate-200/40 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-200/40 hover:ring-cyan-200/60 sm:p-4 sm:hover:scale-[1.02]">
+                <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-cyan-200/20 blur-2xl transition-all duration-500 group-hover/card:scale-150" />
+                <div className="absolute -bottom-6 -left-6 h-16 w-16 rounded-full bg-slate-200/20 blur-xl" />
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-300/40 to-transparent" />
+                <p className="relative text-[8px] font-bold uppercase leading-tight tracking-[0.14em] text-slate-400 sm:text-[9px] sm:tracking-[0.2em]">Total Registros</p>
+                <div className="relative mt-auto pt-2">
+                  <p className="text-xl font-black tabular-nums leading-none text-slate-800 drop-shadow-sm sm:text-3xl">{pacientes.length.toLocaleString("pt-BR")}</p>
+                  <p className="mt-1 text-[9px] font-semibold leading-tight text-cyan-600/70 sm:text-[10px]">{competencia ? `Ref. ${(() => { const [ano, mes] = competencia.split("-"); const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]; return `${meses[parseInt(mes,10)-1] ?? mes}/${ano}`; })()}` : "Base CSV"}</p>
+                </div>
+              </div>
+
+              {/* Pendentes */}
+              <div className="group/card relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 via-orange-50/60 to-white p-3.5 ring-1 ring-amber-200/50 shadow-lg shadow-amber-200/30 transition-all duration-300 hover:shadow-xl hover:shadow-amber-300/40 hover:ring-amber-300/60 sm:p-4 sm:hover:scale-[1.02]">
+                <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-amber-300/20 blur-2xl transition-all duration-500 group-hover/card:scale-150" />
+                <div className="absolute -bottom-4 -left-4 h-12 w-12 rounded-full bg-orange-200/20 blur-xl" />
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+                <div className="relative flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 shadow-sm shadow-amber-300" />
+                  <p className="text-[8px] font-bold uppercase leading-tight tracking-[0.14em] text-amber-600 sm:text-[9px] sm:tracking-[0.2em]">Pendentes</p>
+                </div>
+                <div className="relative mt-auto pt-2">
+                  <p className="text-xl font-black tabular-nums leading-none text-amber-700 drop-shadow-sm sm:text-3xl">{dadosResolucaoGeral.pendentes.toLocaleString("pt-BR")}</p>
+                  <p className="mt-1 text-[9px] font-semibold leading-tight text-amber-500/80 sm:text-[10px]">{dadosResolucaoGeral.total > 0 ? Math.round((dadosResolucaoGeral.pendentes / dadosResolucaoGeral.total) * 100) : 0}% do total</p>
+                </div>
+              </div>
+
+              {/* Resolvidos */}
+              <div className="group/card relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-50 via-green-50/60 to-white p-3.5 ring-1 ring-emerald-200/50 shadow-lg shadow-emerald-200/30 transition-all duration-300 hover:shadow-xl hover:shadow-emerald-300/40 hover:ring-emerald-300/60 sm:p-4 sm:hover:scale-[1.02]">
+                <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-emerald-300/20 blur-2xl transition-all duration-500 group-hover/card:scale-150" />
+                <div className="absolute -bottom-4 -left-4 h-12 w-12 rounded-full bg-green-200/20 blur-xl" />
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent" />
+                <div className="relative flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-gradient-to-r from-emerald-400 to-green-500 shadow-sm shadow-emerald-300" />
+                  <p className="text-[8px] font-bold uppercase leading-tight tracking-[0.14em] text-emerald-600 sm:text-[9px] sm:tracking-[0.2em]">Resolvidos</p>
+                </div>
+                <div className="relative mt-auto pt-2">
+                  <p className="text-xl font-black tabular-nums leading-none text-emerald-700 drop-shadow-sm sm:text-3xl">{dadosResolucaoGeral.resolvidos.toLocaleString("pt-BR")}</p>
+                  <p className="mt-1 text-[9px] font-semibold leading-tight text-emerald-500/80 sm:text-[10px]">{dadosResolucaoGeral.percentual}% do total</p>
+                </div>
+              </div>
+
+              {/* Não Resolvidos */}
+              <div className="group/card relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-br from-red-50 via-rose-50/60 to-white p-3.5 ring-1 ring-red-200/50 shadow-lg shadow-red-200/30 transition-all duration-300 hover:shadow-xl hover:shadow-red-300/40 hover:ring-red-300/60 sm:p-4 sm:hover:scale-[1.02]">
+                <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-red-300/20 blur-2xl transition-all duration-500 group-hover/card:scale-150" />
+                <div className="absolute -bottom-4 -left-4 h-12 w-12 rounded-full bg-rose-200/20 blur-xl" />
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-400/50 to-transparent" />
+                <div className="relative flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-gradient-to-r from-red-400 to-rose-500 shadow-sm shadow-red-300" />
+                  <p className="text-[8px] font-bold uppercase leading-tight tracking-[0.14em] text-red-600 sm:text-[9px] sm:tracking-[0.2em]">Não Resolvidos</p>
+                </div>
+                <div className="relative mt-auto pt-2">
+                  <p className="text-xl font-black tabular-nums leading-none text-red-700 drop-shadow-sm sm:text-3xl">{dadosResolucaoGeral.naoResolvidos.toLocaleString("pt-BR")}</p>
+                  <p className="mt-1 text-[9px] font-semibold leading-tight text-red-500/80 sm:text-[10px]">{dadosResolucaoGeral.total > 0 ? Math.round((dadosResolucaoGeral.naoResolvidos / dadosResolucaoGeral.total) * 100) : 0}% do total</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="mx-auto max-w-[1380px] px-4 py-8 sm:px-6 lg:px-8" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(148,163,184,0.10) 1px, transparent 0)', backgroundSize: '28px 28px' }}>
 
@@ -853,37 +928,88 @@ export default function PaginaResumo() {
           </div>
         )}
 
-        {/* ── KPI Cards ────────────────────────────────────────────── */}
+        {/* ── Resolução + Indicadores ──────────────────────────────── */}
         {!carregando && (<>
-        <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
-          <KpiCard titulo="Total Pacientes" valor={totalPacientes} cor="bg-cyan-500" corHex="#06b6d4" subtitulo="prioritários" delay={0}
-            icone={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>}
-          />
-          <KpiCard titulo="Acompanhamentos" valor={totalAcomps} cor="bg-violet-500" corHex="#8b5cf6" subtitulo="registros" delay={100}
-            icone={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15a2.25 2.25 0 0 1 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" /></svg>}
-          />
-          <KpiCard titulo="Este Mês" valor={acompsMesAtual} cor="bg-emerald-500" corHex="#10b981" subtitulo="acompanhamentos" delay={200}
-            icone={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>}
-          />
-          <KpiCard titulo="Gestantes" valor={gestantes} cor="bg-rose-500" corHex="#f43f5e" subtitulo={totalPacientes > 0 ? `${Math.round((gestantes / totalPacientes) * 100)}% do total` : "0% do total"} delay={300}
-            icone={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>}
-          />
-        </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
 
-        <div className="mt-2">
-          <BarraResolucao percent={dadosResolucao.percentual} />
+          {/* Resolução dos Acompanhamentos */}
+          <ChartCard
+            titulo="RESOLUÇÃO DOS ACOMPANHAMENTOS"
+            subtitulo={`${dadosResolucao.total} PACIENTE${dadosResolucao.total !== 1 ? "S" : ""} • ${dadosResolucao.percentual}% RESOLVIDO`}
+            icone={<svg className="h-[18px] w-[18px] text-cyan-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>}
+          >
+            <div className="h-[340px]">
+              <Chart option={{
+                tooltip: { ...tooltipPremium, trigger: "item", formatter: (p: { name: string; value: number; percent: number }) => `${p.name.toUpperCase()}<br/><span style="font-size:18px;font-weight:900">${p.value}</span> <span style="color:#94a3b8">(${p.percent.toFixed(1)}%)</span>` },
+                legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 10, fontWeight: "bold", textTransform: "uppercase" as const }, itemGap: 16, itemWidth: 12, itemHeight: 12, icon: "roundRect", formatter: (name: string) => name.toUpperCase() },
+                graphic: [
+                  { type: "text", left: "center", top: "40%", style: { text: `${dadosResolucao.percentual}%`, fontSize: 30, fontWeight: 900, fill: "#1e293b", fontFamily: "Inter, sans-serif", textAlign: "center" } },
+                  { type: "text", left: "center", top: "50%", style: { text: "RESOLVIDOS", fontSize: 10, fontWeight: 700, fill: "#94a3b8", fontFamily: "Inter, sans-serif", textAlign: "center", letterSpacing: 2 } },
+                  { type: "text", left: "center", top: "57%", style: { text: `${dadosResolucao.resolvidos} DE ${dadosResolucao.total}`, fontSize: 11, fontWeight: 600, fill: "#cbd5e1", fontFamily: "Inter, sans-serif", textAlign: "center" } },
+                ],
+                series: [{
+                  type: "pie", radius: ["52%", "78%"], center: ["50%", "46%"],
+                  avoidLabelOverlap: false,
+                  itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 3 },
+                  label: { show: false },
+                  emphasis: { scale: true, scaleSize: 8, label: { show: true, fontSize: 12, fontWeight: 900, color: "#1e293b", formatter: "{b}\n{d}%" }, itemStyle: { shadowBlur: 20, shadowColor: "rgba(0,0,0,0.15)" } },
+                  data: [
+                    { value: dadosResolucao.resolvidos, name: "RESOLVIDO", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#34d399" }, { offset: 1, color: "#10b981" }] } } },
+                    { value: dadosResolucao.pendentes, name: "PENDENTE", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#fbbf24" }, { offset: 1, color: "#f59e0b" }] } } },
+                    { value: dadosResolucao.naoResolvidos, name: "NÃO RESOLVIDO", itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 1, colorStops: [{ offset: 0, color: "#f87171" }, { offset: 1, color: "#ef4444" }] } } },
+                  ].filter(d => d.value > 0),
+                  animationType: "scale", animationEasing: "elasticOut", animationDelay: (i: number) => i * 200,
+                }],
+              }} className="h-full w-full" />
+            </div>
+          </ChartCard>
+
+          {/* Indicadores de Saúde — ECharts bar horizontal */}
+          <ChartCard titulo="INDICADORES DE SAÚDE" subtitulo="PREVALÊNCIA NOS GRUPOS PRIORITÁRIOS" icone={I.heart}>
+            <div className="h-[340px]">
+              <Chart option={{
+                tooltip: { ...tooltipPremium, trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(6,182,212,0.06)" } }, formatter: (params: Array<{ name: string; value: number; marker: string }>) => {
+                  const p = params[0];
+                  const pct = totalPacientes > 0 ? ((p.value / totalPacientes) * 100).toFixed(1) : "0.0";
+                  return `<span style="color:#94a3b8;font-size:11px;text-transform:uppercase">${p.name}</span><br/>${p.marker} <span style="font-size:18px;font-weight:900;color:#1e293b">${p.value}</span> <span style="color:#94a3b8;text-transform:uppercase">PACIENTES</span><br/><span style="color:#64748b;font-size:11px">${pct}% DO TOTAL</span>`;
+                } },
+                grid: { left: 8, right: 30, bottom: 8, top: 8, containLabel: true },
+                xAxis: { type: "value", show: false },
+                yAxis: {
+                  type: "category",
+                  data: ["GESTANTES", "CRIANÇAS ≤2A", "TABAGISTAS", "TUBERCULOSE"],
+                  inverse: true,
+                  axisLabel: { color: "#475569", fontSize: 11, fontWeight: 700, fontFamily: "Inter, sans-serif" },
+                  axisLine: { show: false }, axisTick: { show: false },
+                },
+                series: [{
+                  type: "bar", barWidth: "55%",
+                  data: [
+                    { value: gestantes, itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: "#fb7185" }, { offset: 1, color: "#f43f5e" }] }, borderRadius: [0, 10, 10, 0] } },
+                    { value: criancas, itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: "#a78bfa" }, { offset: 1, color: "#7c3aed" }] }, borderRadius: [0, 10, 10, 0] } },
+                    { value: tabagistas, itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: "#fbbf24" }, { offset: 1, color: "#d97706" }] }, borderRadius: [0, 10, 10, 0] } },
+                    { value: tb, itemStyle: { color: { type: "linear", x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: "#fb923c" }, { offset: 1, color: "#ea580c" }] }, borderRadius: [0, 10, 10, 0] } },
+                  ],
+                  label: { show: true, position: "right", fontSize: 13, fontWeight: 900, color: "#1e293b", formatter: (p: { value: number }) => `${p.value}  (${totalPacientes > 0 ? Math.round((p.value / totalPacientes) * 100) : 0}%)` },
+                  emphasis: { itemStyle: { shadowBlur: 12, shadowColor: "rgba(0,0,0,0.15)" } },
+                  animationDelay: (i: number) => i * 150,
+                }],
+              }} className="h-full w-full" />
+            </div>
+          </ChartCard>
+
         </div>
 
         {/* ── Gráficos Linha 1 ─────────────────────────────────────── */}
         <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <ChartCard titulo="Grupos Prioritários" subtitulo="Distribuição por categoria" icone={I.pizza}>
-            <div className="h-[380px]">
-              <Chart option={pizzaOption} className="h-full w-full" />
-            </div>
-          </ChartCard>
           <ChartCard titulo="Situação Pós-Busca" subtitulo="Resultado dos acompanhamentos">
             <div className="h-[420px]">
               <Chart option={donutOption} className="h-full w-full" />
+            </div>
+          </ChartCard>
+          <ChartCard titulo="Faixas Etárias" subtitulo="Distribuição por idade dos pacientes prioritários">
+            <div className="h-[420px]">
+              <Chart option={faixaOption} className="h-full w-full" />
             </div>
           </ChartCard>
         </div>
@@ -903,7 +1029,7 @@ export default function PaginaResumo() {
         </div>
 
         {/* ── Tabelas ──────────────────────────────────────────────── */}
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
 
           {/* Top Unidades */}
           <ChartCard titulo="Top Unidades" subtitulo="Pacientes por unidade de saúde">
@@ -948,56 +1074,6 @@ export default function PaginaResumo() {
               ))}
             </div>
           </ChartCard>
-        </div>
-
-        {/* ── Tabela: Indicadores de Saúde ─────────────────────────── */}
-        <div className="mt-6">
-          <ChartCard titulo="Indicadores de Saúde" subtitulo="Prevalência nos grupos prioritários" icone={I.heart}>
-            <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
-              {[
-                { label: "Gestantes", count: gestantes, color: "rose", bgGrad: "from-rose-50 to-rose-100/50", ringGrad: "ring-rose-200/50", textGrad: "from-rose-500 to-rose-600" },
-                { label: "Crianças ≤2a", count: criancas, color: "violet", bgGrad: "from-violet-50 to-violet-100/50", ringGrad: "ring-violet-200/50", textGrad: "from-violet-500 to-violet-600" },
-                { label: "Tabagistas", count: tabagistas, color: "amber", bgGrad: "from-amber-50 to-amber-100/50", ringGrad: "ring-amber-200/50", textGrad: "from-amber-500 to-amber-600" },
-                { label: "Tuberculose", count: tb, color: "orange", bgGrad: "from-orange-50 to-orange-100/50", ringGrad: "ring-orange-200/50", textGrad: "from-orange-500 to-orange-600" },
-              ].map((item, i) => (
-                <div key={item.label} className="group/card flex flex-col items-center rounded-2xl border border-slate-100 bg-white/60 p-6 shadow-[0_4px_10px_rgba(0,0,0,0.04),0_0_0_1px_rgba(226,232,240,0.5)] transition-all duration-500 hover:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.18),0_0_0_1px_rgba(226,232,240,0.8)] hover:-translate-y-1.5 animate-[fadeInUp_0.5s_ease-out_both]" style={{ animationDelay: `${i * 100 + 200}ms` }}>
-                  <div className={`relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${item.bgGrad} ring-1 ${item.ringGrad} transition-all duration-300 group-hover/card:scale-110 group-hover/card:shadow-md`}>
-                    <span className={`text-2xl font-black bg-gradient-to-br ${item.textGrad} bg-clip-text text-transparent`}>{item.count}</span>
-                  </div>
-                  <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-center">{item.label}</p>
-                  <div className="mt-1.5 h-1 w-8 rounded-full bg-slate-100 overflow-hidden">
-                    <div className={`h-full rounded-full bg-gradient-to-r ${item.textGrad} transition-all duration-1000`} style={{ width: `${totalPacientes > 0 ? Math.min((item.count / totalPacientes) * 100 * 4, 100) : 0}%` }} />
-                  </div>
-                  <p className="mt-1 text-[10px] font-black text-slate-400 tabular-nums">{totalPacientes > 0 ? Math.round((item.count / totalPacientes) * 100) : 0}%</p>
-                </div>
-              ))}
-            </div>
-          </ChartCard>
-        </div>
-
-        {/* ── Gráficos Linha 3 ─────────────────────────────────────── */}
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <ChartCard titulo="Tipo de Contato" subtitulo="Como os pacientes foram contatados">
-            <div className="h-[370px]">
-              <Chart option={contatoOption} className="h-full w-full" />
-            </div>
-          </ChartCard>
-          <ChartCard titulo="Entraves Identificados" subtitulo="Barreiras encontradas nos acompanhamentos" icone={I.warning}>
-            <div className="h-[370px]">
-              {topEntraves.length > 0 ? <Chart option={entravesOption} className="h-full w-full" /> : (
-                <div className="flex h-full items-center justify-center text-sm text-slate-400">Nenhum entrave registrado.</div>
-              )}
-            </div>
-          </ChartCard>
-        </div>
-
-        {/* ── Gráficos Linha 4 ─────────────────────────────────────── */}
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <ChartCard titulo="Faixas Etárias" subtitulo="Distribuição por idade dos pacientes prioritários">
-            <div className="h-[350px]">
-              <Chart option={faixaOption} className="h-full w-full" />
-            </div>
-          </ChartCard>
 
           {/* Top Microáreas */}
           <ChartCard titulo="Top Microáreas" subtitulo="Pacientes por microárea" icone={I.pin}>
@@ -1018,6 +1094,22 @@ export default function PaginaResumo() {
                   </div>
                 </div>
               ))}
+            </div>
+          </ChartCard>
+        </div>
+
+        {/* ── Gráficos Linha 3 ─────────────────────────────────────── */}
+        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <ChartCard titulo="Tipo de Contato" subtitulo="Como os pacientes foram contatados">
+            <div className="h-[370px]">
+              <Chart option={contatoOption} className="h-full w-full" />
+            </div>
+          </ChartCard>
+          <ChartCard titulo="Entraves Identificados" subtitulo="Barreiras encontradas nos acompanhamentos" icone={I.warning}>
+            <div className="h-[370px]">
+              {topEntraves.length > 0 ? <Chart option={entravesOption} className="h-full w-full" /> : (
+                <div className="flex h-full items-center justify-center text-sm text-slate-400">Nenhum entrave registrado.</div>
+              )}
             </div>
           </ChartCard>
         </div>
