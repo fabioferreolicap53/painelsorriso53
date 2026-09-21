@@ -68,14 +68,6 @@ function formatTime(sec: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function calcEta(deleted: number, total: number, elapsedMs: number): string {
-  if (deleted === 0 || elapsedMs < 1000) return "--";
-  const rate = deleted / (elapsedMs / 1000);
-  const remaining = total - deleted;
-  const etaSec = Math.ceil(remaining / rate);
-  return formatTime(etaSec);
-}
-
 // ── Componente ─────────────────────────────────────────────────────────
 
 export default function PaginaExclusao() {
@@ -84,7 +76,6 @@ export default function PaginaExclusao() {
   const [deleteControl, setDeleteControl] = useState<DeleteControl>("idle");
   const [deleteProgress, setDeleteProgress] = useState<DeleteProgress>({ deleted: 0, total: 0, errors: 0 });
   const [deleteSummary, setDeleteSummary] = useState<DeleteSummary | null>(null);
-  const [deleteEta, setDeleteEta] = useState("--");
 
   // Modal senha
   const [showModal, setShowModal] = useState(false);
@@ -95,13 +86,11 @@ export default function PaginaExclusao() {
   // Controle assíncrono via useRef
   const flagsRef = useRef({ paused: false, cancelled: false });
   const startTimeRef = useRef(0);
-  const etaTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const progressRef = useRef({ deleted: 0, total: 0 });
 
   // Cleanup
   useEffect(() => {
     return () => {
-      if (etaTimerRef.current) clearInterval(etaTimerRef.current);
       if (deleteControl !== "idle") flagsRef.current.cancelled = true;
     };
   }, [deleteControl]);
@@ -189,18 +178,10 @@ export default function PaginaExclusao() {
     setDeleteControl("running");
     setDeleteProgress({ deleted: 0, total: 0, errors: 0 });
     setDeleteSummary(null);
-    setDeleteEta("--");
 
     flagsRef.current = { paused: false, cancelled: false };
     startTimeRef.current = Date.now();
     progressRef.current = { deleted: 0, total: 0 };
-
-    // Timer de ETA
-    etaTimerRef.current = setInterval(() => {
-      const p = progressRef.current;
-      const elapsed = Date.now() - startTimeRef.current;
-      setDeleteEta(calcEta(p.deleted, p.total, elapsed));
-    }, 2000);
 
     try {
       // Buscar todos os IDs via REST paginado
@@ -230,7 +211,6 @@ export default function PaginaExclusao() {
         setDeleteSummary({ elapsedSec: 0, errors: 0, total: 0, cancelled: false });
         setDeleteStatus({ stage: "completed", message: "Nenhum registro encontrado para excluir." });
         setDeleteControl("idle");
-        if (etaTimerRef.current) clearInterval(etaTimerRef.current);
         return;
       }
 
@@ -276,13 +256,11 @@ export default function PaginaExclusao() {
       }
 
       // Finalizar
-      if (etaTimerRef.current) clearInterval(etaTimerRef.current);
       const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000);
       setDeleteSummary({ elapsedSec: elapsed, errors, total, cancelled: wasCancelled });
       setDeleteStatus({ stage: "completed", message: wasCancelled ? "Exclusão interrompida" : "Exclusão concluída!" });
       setDeleteControl("idle");
     } catch (err) {
-      if (etaTimerRef.current) clearInterval(etaTimerRef.current);
       const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000);
       const msg = err instanceof Error ? err.message : "Falha na comunicação";
       if (msg === "Cancelado") {
@@ -320,7 +298,6 @@ export default function PaginaExclusao() {
     setDeleteControl("idle");
     setDeleteProgress({ deleted: 0, total: 0, errors: 0 });
     setDeleteSummary(null);
-    setDeleteEta("--");
   }
 
   // ── RENDER ──────────────────────────────────────────────────────────

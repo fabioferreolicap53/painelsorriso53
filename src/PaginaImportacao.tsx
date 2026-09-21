@@ -78,20 +78,10 @@ function convertBoolean(val: string): boolean {
   return v === "SIM" || v === "TRUE" || v === "1" || v === "S";
 }
 
-// ── Helpers de tempo ──────────────────────────────────────────────────
-
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
-function calcEta(imported: number, total: number, elapsedMs: number): string {
-  if (imported === 0 || elapsedMs < 1000) return "--";
-  const rate = imported / (elapsedMs / 1000);
-  const remaining = total - imported;
-  const etaSec = Math.ceil(remaining / rate);
-  return formatTime(etaSec);
 }
 
 // ── Tipos de estado ────────────────────────────────────────────────────
@@ -131,10 +121,7 @@ export default function PaginaImportacao() {
   const importFlagsRef = useRef({ paused: false, cancelled: false });
   const importStartTimeRef = useRef(0);
   const importProgressRef = useRef({ imported: 0, total: 0 });
-  const importEtaTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [importEta, setImportEta] = useState("--");
 
   // Modal senha — validação de role "cap" antes de importar
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -146,7 +133,6 @@ export default function PaginaImportacao() {
   // Cleanup
   useEffect(() => {
     return () => {
-      if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
       if (importControl === "running" || importControl === "paused") {
         importFlagsRef.current.cancelled = true;
       }
@@ -250,12 +236,10 @@ export default function PaginaImportacao() {
   }, []);
 
   const handleReset = useCallback(() => {
-    if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
     setUploadStatus({ stage: "idle", message: "", current: 0, total: 0 });
     setImportControl("idle");
     setImportProgress({ imported: 0, total: 0, errors: 0 });
     setImportSummary(null);
-    setImportEta("--");
   }, []);
 
   // ── Upload + parse + import ─────────────────────────────────────────
@@ -273,19 +257,11 @@ export default function PaginaImportacao() {
     }
 
     setImportSummary(null);
-    setImportEta("--");
     setUploadStatus({ stage: "reading", message: "Lendo arquivo...", current: 0, total: 0, fileName: file.name });
     setImportControl("running");
     importFlagsRef.current = { paused: false, cancelled: false };
     importStartTimeRef.current = Date.now();
     importProgressRef.current = { imported: 0, total: 0 };
-
-    // Timer de ETA (usa importProgressRef para evitar stale closure)
-    importEtaTimerRef.current = setInterval(() => {
-      const p = importProgressRef.current;
-      const elapsed = Date.now() - importStartTimeRef.current;
-      setImportEta(calcEta(p.imported, p.total, elapsed));
-    }, 2000);
 
     try {
       // Parse CSV
@@ -393,7 +369,6 @@ export default function PaginaImportacao() {
       }
 
       // Finalizar
-      if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
       const elapsed = Math.round((Date.now() - importStartTimeRef.current) / 1000);
       setImportSummary({ elapsedSec: elapsed, errors, total: records.length, cancelled: wasCancelled });
       setImportControl("idle");
@@ -417,7 +392,6 @@ export default function PaginaImportacao() {
         setImportControl("idle");
       }
     } catch (err: unknown) {
-      if (importEtaTimerRef.current) clearInterval(importEtaTimerRef.current);
       const elapsed = Math.round((Date.now() - importStartTimeRef.current) / 1000);
       setImportSummary({ elapsedSec: elapsed, errors: 0, total: 0, cancelled: false });
       setUploadStatus({ stage: "error", message: `Erro: ${err instanceof Error ? err.message : "Falha na comunicacao"}`, current: 0, total: 0 });

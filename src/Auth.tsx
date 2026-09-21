@@ -325,7 +325,6 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await resp.json();
 
       if (!resp.ok) {
         setError("Se este e-mail ainda não foi cadastrado, você receberá um e-mail de confirmação.");
@@ -334,7 +333,7 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
 
       // Enviar email de verificação
       try {
-        const vResp = await fetch(pb("request-verification"), {
+        await fetch(pb("request-verification"), {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
           body: "email=" + encodeURIComponent(email.trim()),
