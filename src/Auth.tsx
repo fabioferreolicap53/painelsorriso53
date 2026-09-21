@@ -328,7 +328,7 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
       const data = await resp.json();
 
       if (!resp.ok) {
-        setError(data.message || data.data?.email?.message || "Erro ao criar conta");
+        setError("Se este e-mail ainda não foi cadastrado, você receberá um e-mail de confirmação.");
         return;
       }
 
@@ -336,14 +336,10 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
       try {
         const vResp = await fetch(pb("request-verification"), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim() }),
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+          body: "email=" + encodeURIComponent(email.trim()),
         });
-        if (!vResp.ok) {
-          const vData = await vResp.json().catch(() => ({}));
-          console.error("[Verificação] Erro:", vData);
-        }
-      } catch (e) { console.error("[Verificação] Falha:", e); }
+      } catch { /* ignore */ }
 
       setSuccess("Conta criada! Verifique seu e-mail para confirmar o cadastro.");
       setTimeout(() => onNavigate("verify"), 3000);
@@ -526,8 +522,8 @@ export function TelaVerify({ onNavigate }: { onNavigate: (v: string) => void }) 
     try {
       await fetch(pb("request-verification"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
+        body: "email=" + encodeURIComponent(email.trim()),
       });
       setReenviado(true);
     } catch { /* ignore */ }
@@ -574,29 +570,31 @@ export function TelaForgot({ onNavigate }: { onNavigate: (v: string) => void }) 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(""); setSuccess("");
     if (!email.trim()) { setError("Digite seu e-mail"); return; }
+    if (cooldown > 0) return;
     setLoading(true);
     try {
-      const resp = await fetch(pb("request-password-reset"), {
+      await fetch(pb("request-password-reset"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
       });
-      if (resp.ok) {
-        setSuccess("Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.");
-      } else {
-        setSuccess("Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.");
-      }
-    } catch {
-      setSuccess("Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.");
-    } finally {
-      setLoading(false);
-    }
+    } catch { /* ignore */ }
+    setSuccess("Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.");
+    setLoading(false);
+    setCooldown(30);
   }
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   return (
     <AuthCard>
@@ -609,8 +607,8 @@ export function TelaForgot({ onNavigate }: { onNavigate: (v: string) => void }) 
         />
         <ErrorMsg msg={error} />
         <SuccessMsg msg={success} />
-        <button type="submit" disabled={loading || !!success} className="w-full rounded-2xl bg-blue-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50">
-          {loading ? <span className="inline-flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Enviando...</span> : "Enviar Link de Redefinição"}
+        <button type="submit" disabled={loading || !!success || cooldown > 0} className="w-full rounded-2xl bg-blue-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50">
+          {loading ? <span className="inline-flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Enviando...</span> : cooldown > 0 ? `Aguarde ${cooldown}s` : "Enviar Link de Redefinição"}
         </button>
       </form>
       <div className="mt-6 text-center">

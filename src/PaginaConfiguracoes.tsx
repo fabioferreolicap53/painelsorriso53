@@ -104,9 +104,14 @@ export default function PaginaConfiguracoes() {
     }
     setEmailLoading(true);
     try {
+      const authToken = localStorage.getItem("pb_auth_token") || "";
       const resp = await fetch(`${PB_URL}/api/collections/${PB_COLLECTION}/request-email-change`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          ...(authToken ? { "Authorization": authToken } : {}),
+        },
         body: JSON.stringify({ newEmail: novoEmail.trim() }),
       });
       if (resp.ok) {
