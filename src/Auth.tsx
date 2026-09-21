@@ -126,7 +126,7 @@ export function TelaLogin({ onLogin, onNavigate }: LoginProps) {
       const data = await resp.json();
       if (!resp.ok || !data.token) { setError("Email ou senha incorretos"); return; }
       if (data.record && (data.record.verified === false || data.record.verified === 0)) {
-        setError("Email não confirmado. Verifique sua caixa de entrada.");
+        setError("__UNVERIFIED__");
         return;
       }
       try { localStorage.setItem("pb_auth_token", data.token); } catch { /* */ }
@@ -180,7 +180,14 @@ export function TelaLogin({ onLogin, onNavigate }: LoginProps) {
             </button>
           </div>
         </div>
-        <ErrorMsg msg={error} />
+        {error === "__UNVERIFIED__" ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+            <p className="text-xs font-bold text-amber-700">Email não confirmado. Verifique sua caixa de entrada.</p>
+            <button type="button" onClick={() => onNavigate("verify")} className="mt-2 text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors">
+              Reenviar e-mail de confirmação
+            </button>
+          </div>
+        ) : <ErrorMsg msg={error} />}
         <button type="submit" disabled={loading} className="relative w-full overflow-hidden rounded-2xl bg-blue-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-blue-500/20 transition-all hover:bg-blue-700 hover:shadow-blue-500/30 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
           {loading ? <span className="inline-flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Autenticando...</span> : "Entrar no Painel"}
         </button>
@@ -327,15 +334,19 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
 
       // Enviar email de verificação
       try {
-        await fetch(pb("request-verification"), {
+        const vResp = await fetch(pb("request-verification"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: email.trim() }),
         });
-      } catch { /* ignora erro de envio de email */ }
+        if (!vResp.ok) {
+          const vData = await vResp.json().catch(() => ({}));
+          console.error("[Verificação] Erro:", vData);
+        }
+      } catch (e) { console.error("[Verificação] Falha:", e); }
 
       setSuccess("Conta criada! Verifique seu e-mail para confirmar o cadastro.");
-      setTimeout(() => onNavigate("login"), 3000);
+      setTimeout(() => onNavigate("verify"), 3000);
     } catch {
       setError("Erro ao conectar ao servidor");
     } finally {
@@ -504,6 +515,25 @@ export function TelaRegister({ onNavigate }: RegisterProps) {
 // ── Verificação de Email ───────────────────────────────────────────────
 
 export function TelaVerify({ onNavigate }: { onNavigate: (v: string) => void }) {
+  const [email, setEmail] = useState("");
+  const [resendando, setResendando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
+
+  async function handleResend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setResendando(true);
+    try {
+      await fetch(pb("request-verification"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setReenviado(true);
+    } catch { /* ignore */ }
+    setResendando(false);
+  }
+
   return (
     <AuthCard>
       <Logo />
@@ -512,9 +542,25 @@ export function TelaVerify({ onNavigate }: { onNavigate: (v: string) => void }) 
           <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
         </div>
         <h2 className="text-lg font-black text-slate-900">Verifique seu e-mail</h2>
-        <p className="mt-3 text-sm text-slate-500">Enviamos um link de confirmação para o seu e-mail. Clique no link para ativar sua conta.</p>
-        <button onClick={() => onNavigate("login")} className="mt-6 w-full rounded-2xl bg-slate-900 py-3 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-slate-800 active:scale-[0.98]">
-          Voltar ao Login
+        <p className="mt-3 text-sm text-slate-500">Enviamos um link de confirmação para seu e-mail. Clique no link para ativar sua conta.</p>
+      </div>
+      <form onSubmit={handleResend} className="mt-5 space-y-4">
+        <InputField
+          label="Reenviar e-mail de confirmação"
+          type="email"
+          placeholder="exemplo@email.com"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setReenviado(false); }}
+          icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>}
+        />
+        {reenviado && <SuccessMsg msg="E-mail reenviado! Verifique sua caixa de entrada." />}
+        <button type="submit" disabled={resendando || reenviado} className="w-full rounded-2xl bg-blue-600 py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+          {resendando ? <span className="inline-flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Reenviando...</span> : "Reenviar Confirmação"}
+        </button>
+      </form>
+      <div className="mt-6 text-center">
+        <button onClick={() => onNavigate("login")} className="text-[11px] font-bold text-slate-400 hover:text-slate-600 transition-colors">
+          Voltar ao <span className="text-blue-600">Login</span>
         </button>
       </div>
     </AuthCard>

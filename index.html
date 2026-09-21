@@ -39,10 +39,10 @@
           fetch(pbUrl + '/api/collections/painelsorriso53_users/confirm-verification', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
-            body: 'token=' + encodeURIComponent(verifyToken),
+            body: JSON.stringify({ token: verifyToken }),
           }).then(function(resp) {
             var ct = resp.headers.get('content-type') || '';
             if (ct.indexOf('application/json') !== -1) {
@@ -54,7 +54,7 @@
                   if (msg.indexOf('already') !== -1 || msg.indexOf('verificado') !== -1) {
                     window.location.href = window.location.pathname + '?verified=1';
                   } else {
-                    window.location.href = window.location.pathname + '?verify_error=1';
+                    window.location.href = window.location.pathname + '?verify_error=' + encodeURIComponent(msg || 'token_invalido');
                   }
                 }
               });
@@ -62,9 +62,9 @@
             if (resp.ok || resp.redirected) {
               window.location.href = window.location.pathname + '?verified=1';
             } else {
-              window.location.href = window.location.pathname + '?verify_error=1';
+              window.location.href = window.location.pathname + '?verify_error=http_' + resp.status;
             }
-          }).catch(function() {
+          }).catch(function(err) {
             window.location.href = window.location.pathname + '?verify_error=connection';
           });
         } else {
