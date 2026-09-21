@@ -317,7 +317,7 @@ export default function PainelSorriso53() {
     return null;
   });
 
-  const [verificacaoStatus] = useState<"nenhum" | "sucesso" | "erro">(() => {
+  const [verificacaoStatus, setVerificacaoStatus] = useState<"nenhum" | "sucesso" | "erro">(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("verified") === "1") {
       window.history.replaceState(null, "", window.location.pathname);
@@ -334,6 +334,7 @@ export default function PainelSorriso53() {
 
   function handleAuthNavigate(view: string) {
     setAuthView(view as AuthView);
+    setVerificacaoStatus("nenhum");
     window.scrollTo(0, 0);
   }
 
